@@ -4,8 +4,17 @@ import {getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,serverTimestamp,
 import {firebaseConfig} from "./firebase-config.js";
 const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);let unsubs=[];
 const $=x=>document.getElementById(x), money=n=>"₹"+Number(n||0).toLocaleString("en-IN");
-window.login=async()=>{try{await signInAnonymously(auth)}catch(e){alert("Firebase setup required: "+e.message)}};
-window.logout=()=>signOut(auth);
+window.login = async (event) => {
+  if (event) event.preventDefault();
+  try {
+    await signInAnonymously(auth);
+  } catch(e) {
+    alert("Firebase setup required: " + e.message);
+  }
+};
+
+window.logout = () => signOut(auth);
+
 onAuthStateChanged(auth,async u=>{if(u){$("login").hidden=true;$("app").hidden=false;await saveUserProfile(u);await seedDemoData();listen()}else{$("login").hidden=false;$("app").hidden=true}});
 async function saveUserProfile(u){const role=$("role")?.value||"viewer";await setDoc(doc(db,"users",u.uid),{uid:u.uid,role,displayName:role==="teamOwner"?"Demo Team Owner":role==="player"?"Demo Player":"Demo Viewer",updatedAt:serverTimestamp()},{merge:true})}
 async function seedDemoData(){
