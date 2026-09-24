@@ -22,3 +22,7 @@ small { display: block; color: #667085; margin-top: 10px; }
   header { font-size: 17px; }
 }
 [hidden] { display: none !important; }
+nav button.active {
+    background: #059669 !important; /* सिलेक्ट होने पर यह बढ़िया हरा रंग दिखेगा */
+    color: #fff !important;
+}
