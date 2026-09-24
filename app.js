@@ -36,7 +36,13 @@ async function seedDemoData(){
   for(const t of teams)await addDoc(collection(db,"teams"),{...t,createdAt:serverTimestamp()});
   await addDoc(collection(db,"auctions"),{name:"Live Demo Auction",playerName:"Rahul Sharma",status:"LIVE",currentBid:250000,highestTeamName:"Mumbai Strikers",createdAt:serverTimestamp()});
 }
-window.show=id=>["dash","players","teams","auction","history"].forEach(x=>$(x).hidden=x!==id);
+window.show = id => {
+  ["dash","players","teams","auction","history"].forEach(x => document.getElementById(x).hidden = x !== id);
+  document.querySelectorAll("nav button").forEach(btn => btn.classList.remove("active"));
+  const clickedBtn = Array.from(document.querySelectorAll("nav button")).find(btn => btn.getAttribute("onclick")?.includes(`'${id}'`));
+  if (clickedBtn) clickedBtn.classList.add("active");
+};
+
 function listen(){unsubs.forEach(x=>x());unsubs=[];
 unsubs.push(onSnapshot(collection(db,"players"),s=>{let a=s.docs.map(d=>({id:d.id,...d.data()}));$("pc").textContent=a.length;$("plist").innerHTML=a.map(p=>`<div class="player"><b>${p.name}</b><br>${p.role||""}<div class="price">Base Price: ${money(p.basePrice)}</div><small>Status: ${p.status||"PENDING"}</small></div>`).join("")||"No players yet"}));
 unsubs.push(onSnapshot(collection(db,"teams"),s=>{let a=s.docs.map(d=>({id:d.id,...d.data()}));$("tc").textContent=a.length;$("tlist").innerHTML=a.map(t=>`<div class="team"><b>🏆 ${t.name}</b><br>Purse: ${money(t.purse)}<br>Spent: ${money(t.spent)}</div>`).join("")||"No teams yet"}));
