@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart Cricket Auction</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        🏏 <b>Smart Cricket</b><span>Online Player Auction</span>
+    </header>
+    <main><div id="login" class="box">
+        <h1>Smart Cricket Auction</h1><p>
+            Real-time auction for players, teams and viewers.
+        </p>
+        <input id="email" placeholder="Email (demo only)"><input id="pass" type="password" placeholder="Password (demo only)"><select id="role"><option value="player">Player</option><option value="teamOwner">Team Owner</option><option value="viewer">Viewer</option></select><button onclick="login()">Login / Register</button><small>Demo mode: Anonymous Firebase login. Email/password fields are only for display.</small>
+    </div>
+        <div id="app" hidden>
+            <nav>
+                <button onclick="show('dash')">Dashboard</button><button onclick="show('players')">Players</button><button onclick="show('teams')">Teams</button><button onclick="show('auction')">🔴 Live Auction</button><button onclick="show('history')">History</button><button onclick="logout()">Logout</button>
+            </nav>
+            <section id="dash">
+                <div class="hero">
+                    <h1>Real-Time Cricket Auction</h1><p>
+                        Players register, teams bid and every connected phone sees the same auction.
+                    </p>
+                    <div class="demo">
+                        <b>🎬 Demo data loaded</b><br>Sample players, teams and a live auction are already available.
+                    </div>
+                </div>
+                <div class="cards">
+                    <div>
+                        👤<b id="pc">0</b><small>Players</small>
+                    </div>
+                    <div>
+                        🏆<b id="tc">0</b><small>Teams</small>
+                    </div>
+                    <div>
+                        🔴<b id="bc">0</b><small>Live Auctions</small>
+                    </div>
+                </div>
+            </section>
+            <section id="players" hidden>
+                <h2>Players</h2><button onclick="addPlayer()">+ Register Player</button><div id="plist"></div>
+            </section>
+            <section id="teams" hidden>
+                <h2>Teams</h2><button onclick="addTeam()">+ Create Team</button><div id="tlist"></div>
+            </section>
+            <section id="auction" hidden>
+                <h2>Live Auction</h2><div id="live" class="box">
+                    No live auction yet.
+                </div>
+                <button onclick="startAuction()">Start Another Demo Auction</button>
+            </section>
+            <section id="history" hidden>
+                <h2>Auction History</h2><div id="hist"></div>
+            </section>
+        </div>
+    </main><script type="module" src="app.js"></script>
+</body>
+</html>
