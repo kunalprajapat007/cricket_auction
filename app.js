@@ -1,54 +1,724 @@
-import {initializeApp} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-import {getAuth,onAuthStateChanged,signInAnonymously,signOut} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import {getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,serverTimestamp,getDoc,setDoc,runTransaction} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import {firebaseConfig} from "./firebase-config.js";
-const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);let unsubs=[];
-const $=x=>document.getElementById(x), money=n=>"₹"+Number(n||0).toLocaleString("en-IN");
-window.login = async (event) => {
-  if (event) event.preventDefault();
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword, signOut} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore,collection,addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const fb = initializeApp(firebaseConfig);
+const auth = getAuth(fb);
+const db = getFirestore(fb);
+
+let unsubs = [];
+
+const $ = (id) => document.getElementById(id);
+
+const money = (n) =>
+  "₹" + Number(n || 0).toLocaleString("en-IN");
+
+
+// ===============================
+// LOGIN / REGISTER
+// ===============================
+
+window.login = async () => {
+
+  const email = $("email")?.value.trim();
+  const password = $("pass")?.value;
+  const role = $("role")?.value || "viewer";
+
+  if (!email || !password) {
+    alert("Please enter email and password.");
+    return;
+  }
+
+  if (password.length < 6) {
+    alert("Password must contain at least 6 characters.");
+    return;
+  }
+
   try {
-    await signInAnonymously(auth);
-  } catch(e) {
-    alert("Firebase setup required: " + e.message);
+
+    // Existing user login
+    await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+
+    localStorage.setItem("auctionRole", role);
+
+  } catch (e) {
+
+    // New user registration
+    if (
+      e.code === "auth/invalid-credential" ||
+      e.code === "auth/user-not-found"
+    ) {
+
+      try {
+
+        await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+
+        localStorage.setItem("auctionRole", role);
+
+        alert("Account created successfully!");
+
+      } catch (err) {
+
+        alert(
+          "Registration failed: " +
+          err.message
+        );
+
+      }
+
+    } else {
+
+      alert(
+        "Login failed: " +
+        e.message
+      );
+
+    }
   }
 };
 
-window.logout = () => signOut(auth);
 
-onAuthStateChanged(auth,async u=>{if(u){$("login").hidden=true;$("app").hidden=false;await saveUserProfile(u);await seedDemoData();listen()}else{$("login").hidden=false;$("app").hidden=true}});
-async function saveUserProfile(u){const role=$("role")?.value||"viewer";await setDoc(doc(db,"users",u.uid),{uid:u.uid,role,displayName:role==="teamOwner"?"Demo Team Owner":role==="player"?"Demo Player":"Demo Viewer",updatedAt:serverTimestamp()},{merge:true})}
-async function seedDemoData(){
-  const marker=doc(db,"settings","demoSeed");
-  const seeded=await runTransaction(db,async tx=>{const s=await tx.get(marker);if(s.exists())return false;tx.set(marker,{seeded:true,createdAt:serverTimestamp()});return true});
-  if(!seeded)return;
-  const players=[
-    {name:"Rahul Sharma",role:"Batsman",basePrice:100000,status:"AVAILABLE"},
-    {name:"Arjun Patel",role:"All-Rounder",basePrice:150000,status:"AVAILABLE"},
-    {name:"Vivek Singh",role:"Bowler",basePrice:120000,status:"PENDING"},
-    {name:"Rohan Mehta",role:"Wicket Keeper",basePrice:100000,status:"PENDING"}
-  ];
-  for(const p of players)await addDoc(collection(db,"players"),{...p,createdAt:serverTimestamp()});
-  const teams=[
-    {name:"Mumbai Strikers",purse:5000000,spent:0,squad:[]},
-    {name:"Ahmedabad Kings",purse:5000000,spent:0,squad:[]},
-    {name:"Jaipur Royals",purse:5000000,spent:0,squad:[]}
-  ];
-  for(const t of teams)await addDoc(collection(db,"teams"),{...t,createdAt:serverTimestamp()});
-  await addDoc(collection(db,"auctions"),{name:"Live Demo Auction",playerName:"Rahul Sharma",status:"LIVE",currentBid:250000,highestTeamName:"Mumbai Strikers",createdAt:serverTimestamp()});
-}
-window.show = id => {
-  ["dash","players","teams","auction","history"].forEach(x => document.getElementById(x).hidden = x !== id);
-  document.querySelectorAll("nav button").forEach(btn => btn.classList.remove("active"));
-  const clickedBtn = Array.from(document.querySelectorAll("nav button")).find(btn => btn.getAttribute("onclick")?.includes(`'${id}'`));
-  if (clickedBtn) clickedBtn.classList.add("active");
+// ===============================
+// LOGOUT
+// ===============================
+
+window.logout = () => {
+  signOut(auth);
 };
 
-function listen(){unsubs.forEach(x=>x());unsubs=[];
-unsubs.push(onSnapshot(collection(db,"players"),s=>{let a=s.docs.map(d=>({id:d.id,...d.data()}));$("pc").textContent=a.length;$("plist").innerHTML=a.map(p=>`<div class="player"><b>${p.name}</b><br>${p.role||""}<div class="price">Base Price: ${money(p.basePrice)}</div><small>Status: ${p.status||"PENDING"}</small></div>`).join("")||"No players yet"}));
-unsubs.push(onSnapshot(collection(db,"teams"),s=>{let a=s.docs.map(d=>({id:d.id,...d.data()}));$("tc").textContent=a.length;$("tlist").innerHTML=a.map(t=>`<div class="team"><b>🏆 ${t.name}</b><br>Purse: ${money(t.purse)}<br>Spent: ${money(t.spent)}</div>`).join("")||"No teams yet"}));
-unsubs.push(onSnapshot(collection(db,"auctions"),s=>{let a=s.docs.map(d=>({id:d.id,...d.data()}));let live=a.filter(x=>x.status==="LIVE");$("bc").textContent=live.length;$("live").innerHTML=live.map(a=>`<h2>🔴 ${a.name}</h2><p>Player: <b>${a.playerName}</b></p><p>Current bid: <b>${money(a.currentBid)}</b></p><p>Highest team: ${a.highestTeamName||"No bid"}</p><button onclick="bid('${a.id}')">Bid + ₹50,000</button><button onclick="sellAuction('${a.id}')">Mark SOLD</button>`).join("")||"No live auction yet.";$("hist").innerHTML=a.filter(x=>x.status==="SOLD").map(x=>`<div class="card">${x.playerName} → ${x.highestTeamName} → ${money(x.currentBid)}</div>`).join("")||"No completed sales"}));}
-window.addPlayer=async()=>{let n=prompt("Player name"),r=prompt("Role: Batsman/Bowler/All-Rounder/Wicket Keeper"),p=+prompt("Base price","100000");if(n)await addDoc(collection(db,"players"),{name:n,role:r||"Batsman",basePrice:p||100000,status:"PENDING",createdAt:serverTimestamp()})};
-window.addTeam=async()=>{let n=prompt("Team name"),p=+prompt("Virtual purse","5000000");if(n)await addDoc(collection(db,"teams"),{name:n,purse:p||5000000,spent:0,squad:[],createdAt:serverTimestamp()})};
-window.startAuction=async()=>{let p=prompt("Player name for this auction");if(p)await addDoc(collection(db,"auctions"),{name:"Cricket Player Auction",playerName:p,status:"LIVE",currentBid:100000,highestTeamName:"No bid",createdAt:serverTimestamp()})};
-window.bid=async id=>{const ref=doc(db,"auctions",id);await runTransaction(db,async tx=>{const s=await tx.get(ref);if(!s.exists())return;const d=s.data();tx.update(ref,{currentBid:Number(d.currentBid||0)+50000,highestTeamName:"Demo Team",updatedAt:serverTimestamp()})})};
-window.sellAuction=async id=>updateDoc(doc(db,"auctions",id),{status:"SOLD",updatedAt:serverTimestamp()});
+
+// ===============================
+// AUTH STATE
+// ===============================
+
+onAuthStateChanged(auth, async (user) => {
+
+  if (user) {
+
+    $("login").hidden = true;
+    $("app").hidden = false;
+
+    // Create demo data
+    await seedDemoData();
+
+    // Start realtime listeners
+    listen();
+
+  } else {
+
+    $("login").hidden = false;
+    $("app").hidden = true;
+
+  }
+
+});
+
+
+// ===============================
+// PAGE NAVIGATION
+// ===============================
+
+window.show = (id) => {
+
+  [
+    "dash",
+    "players",
+    "teams",
+    "auction",
+    "history"
+  ].forEach((x) => {
+
+    if ($(x)) {
+      $(x).hidden = x !== id;
+    }
+
+  });
+
+};
+
+
+// ===============================
+// DEMO DATA
+// ===============================
+
+async function seedDemoData() {
+
+  try {
+
+    // PLAYERS
+
+    await setDoc(
+      doc(db, "players", "demo_player_1"),
+      {
+        name: "Virat Demo",
+        role: "Batsman",
+        basePrice: 100000,
+        status: "PENDING",
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    await setDoc(
+      doc(db, "players", "demo_player_2"),
+      {
+        name: "Rohit Demo",
+        role: "Batsman",
+        basePrice: 150000,
+        status: "PENDING",
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    await setDoc(
+      doc(db, "players", "demo_player_3"),
+      {
+        name: "Jasprit Demo",
+        role: "Bowler",
+        basePrice: 200000,
+        status: "PENDING",
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    await setDoc(
+      doc(db, "players", "demo_player_4"),
+      {
+        name: "Hardik Demo",
+        role: "All-Rounder",
+        basePrice: 250000,
+        status: "PENDING",
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    // TEAMS
+
+    await setDoc(
+      doc(db, "teams", "demo_team_1"),
+      {
+        name: "Ahmedabad Warriors",
+        purse: 5000000,
+        spent: 0,
+        squad: [],
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    await setDoc(
+      doc(db, "teams", "demo_team_2"),
+      {
+        name: "Mumbai Strikers",
+        purse: 5000000,
+        spent: 0,
+        squad: [],
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    await setDoc(
+      doc(db, "teams", "demo_team_3"),
+      {
+        name: "Delhi Challengers",
+        purse: 5000000,
+        spent: 0,
+        squad: [],
+        demo: true
+      },
+      { merge: true }
+    );
+
+
+    // LIVE AUCTION
+
+    await setDoc(
+      doc(db, "auctions", "demo_auction_1"),
+      {
+        name: "Live Demo Auction",
+        playerName: "Hardik Demo",
+        status: "LIVE",
+        currentBid: 250000,
+        highestTeamName: "No bid",
+        demo: true
+      },
+      { merge: true }
+    );
+
+  } catch (e) {
+
+    console.error(
+      "Demo data error:",
+      e
+    );
+
+  }
+
+}
+
+
+// ===============================
+// REAL-TIME DATA
+// ===============================
+
+function listen() {
+
+  unsubs.forEach((fn) => fn());
+
+  unsubs = [];
+
+
+  // PLAYERS
+
+  unsubs.push(
+
+    onSnapshot(
+      collection(db, "players"),
+
+      (s) => {
+
+        const players =
+          s.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }));
+
+
+        if ($("pc")) {
+          $("pc").textContent =
+            players.length;
+        }
+
+
+        if ($("plist")) {
+
+          $("plist").innerHTML =
+            players.map((p) => `
+
+              <div class="player">
+
+                <b>${p.name}</b>
+
+                <br>
+
+                ${p.role || ""}
+
+                <div class="price">
+                  ${money(p.basePrice)}
+                </div>
+
+                <small>
+                  Status:
+                  ${p.status || "PENDING"}
+                </small>
+
+              </div>
+
+            `).join("")
+
+            || "No players yet";
+
+        }
+
+      },
+
+      (e) => {
+        console.error(
+          "Players error:",
+          e
+        );
+      }
+
+    )
+
+  );
+
+
+  // TEAMS
+
+  unsubs.push(
+
+    onSnapshot(
+      collection(db, "teams"),
+
+      (s) => {
+
+        const teams =
+          s.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }));
+
+
+        if ($("tc")) {
+          $("tc").textContent =
+            teams.length;
+        }
+
+
+        if ($("tlist")) {
+
+          $("tlist").innerHTML =
+            teams.map((t) => `
+
+              <div class="team">
+
+                <b>
+                  🏆 ${t.name}
+                </b>
+
+                <br>
+
+                Purse:
+                ${money(t.purse)}
+
+                <br>
+
+                Spent:
+                ${money(t.spent)}
+
+              </div>
+
+            `).join("")
+
+            || "No teams yet";
+
+        }
+
+      },
+
+      (e) => {
+        console.error(
+          "Teams error:",
+          e
+        );
+      }
+
+    )
+
+  );
+
+
+  // AUCTION
+
+  unsubs.push(
+
+    onSnapshot(
+      collection(db, "auctions"),
+
+      (s) => {
+
+        const auctions =
+          s.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }));
+
+
+        const live =
+          auctions.filter(
+            (x) => x.status === "LIVE"
+          );
+
+
+        if ($("bc")) {
+          $("bc").textContent =
+            live.length;
+        }
+
+
+        if ($("live")) {
+
+          $("live").innerHTML =
+            live.map((a) => `
+
+              <h2>
+                🔴 ${a.name}
+              </h2>
+
+              <p>
+                Player:
+                <b>${a.playerName}</b>
+              </p>
+
+              <p>
+                Current bid:
+                <b>
+                  ${money(a.currentBid)}
+                </b>
+              </p>
+
+              <p>
+                Highest team:
+                ${a.highestTeamName || "No bid"}
+              </p>
+
+              <button
+                onclick="bid('${a.id}')"
+              >
+                Bid + ₹50,000
+              </button>
+
+            `).join("")
+
+            || "No live auction yet.";
+
+        }
+
+
+        // HISTORY
+
+        if ($("hist")) {
+
+          $("hist").innerHTML =
+            auctions
+
+              .filter(
+                (x) =>
+                  x.status === "SOLD"
+              )
+
+              .map((x) => `
+
+                <div class="card">
+
+                  ${x.playerName}
+                  →
+                  ${x.highestTeamName}
+                  →
+                  ${money(x.currentBid)}
+
+                </div>
+
+              `).join("")
+
+            || "No completed sales";
+
+        }
+
+      },
+
+      (e) => {
+        console.error(
+          "Auction error:",
+          e
+        );
+      }
+
+    )
+
+  );
+
+}
+
+
+// ===============================
+// ADD PLAYER
+// ===============================
+
+window.addPlayer = async () => {
+
+  const name =
+    prompt("Player name");
+
+  const role =
+    prompt(
+      "Role: Batsman/Bowler/All-Rounder/Wicket Keeper",
+      "Batsman"
+    );
+
+  const price =
+    +prompt(
+      "Base price",
+      "100000"
+    );
+
+
+  if (name) {
+
+    await addDoc(
+      collection(db, "players"),
+      {
+
+        name: name,
+
+        role:
+          role || "Batsman",
+
+        basePrice:
+          price || 100000,
+
+        status:
+          "PENDING",
+
+        createdAt:
+          serverTimestamp()
+
+      }
+    );
+
+  }
+
+};
+
+
+// ===============================
+// ADD TEAM
+// ===============================
+
+window.addTeam = async () => {
+
+  const name =
+    prompt("Team name");
+
+  const purse =
+    +prompt(
+      "Virtual purse",
+      "5000000"
+    );
+
+
+  if (name) {
+
+    await addDoc(
+      collection(db, "teams"),
+      {
+
+        name: name,
+
+        purse:
+          purse || 5000000,
+
+        spent: 0,
+
+        squad: [],
+
+        createdAt:
+          serverTimestamp()
+
+      }
+    );
+
+  }
+
+};
+
+
+// ===============================
+// START AUCTION
+// ===============================
+
+window.startAuction = async () => {
+
+  const player =
+    prompt(
+      "Player name for this auction",
+      "Hardik Demo"
+    );
+
+
+  if (player) {
+
+    await addDoc(
+      collection(db, "auctions"),
+      {
+
+        name:
+          "Cricket Player Auction",
+
+        playerName:
+          player,
+
+        status:
+          "LIVE",
+
+        currentBid:
+          100000,
+
+        highestTeamName:
+          "No bid",
+
+        createdAt:
+          serverTimestamp()
+
+      }
+    );
+
+  }
+
+};
+
+
+// ===============================
+// LIVE BID
+// ===============================
+
+window.bid = async (id) => {
+
+  try {
+
+    const newBid =
+      Math.floor(
+        Math.random() * 5 + 3
+      ) * 50000;
+
+
+    await updateDoc(
+      doc(db, "auctions", id),
+      {
+
+        currentBid:
+          newBid,
+
+        highestTeamName:
+          "Demo Team",
+
+        updatedAt:
+          serverTimestamp()
+
+      }
+    );
+
+
+  } catch (e) {
+
+    alert(
+      "Bid failed: " +
+      e.message
+    );
+
+  }
+
+};
+
+
+// ===============================
+// FORCE HIDDEN ELEMENTS
+// ===============================
+
+const style =
+  document.createElement("style");
+
+style.textContent =
+  "[hidden]{display:none!important}";
+
+document.head.appendChild(style);
