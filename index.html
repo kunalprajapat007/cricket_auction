@@ -1,90 +1,183 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Smart Cricket Auction</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Cricket Auction</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        🏏 <b>Smart Cricket</b><span>Online Player Auction</span>
-    </header>
-    <main>
-        <!-- Modern Premium Glassmorphic Login Box -->
-        <div id="login" class="box login-glassmorphism">
-            <div class="cricket-icon">🏏</div>
-            <h1>Smart Cricket Auction</h1>
-            <p class="tagline">Real-time auction for players, teams and viewers.</p>
-            
-            <div class="input-container">
-                <input id="email" placeholder="Email (demo only)">
-                <input id="pass" type="password" placeholder="Password (demo only)">
-                <div class="select-wrapper">
-                    <select id="role">
-                        <option value="player">Player</option>
-                        <option value="teamOwner">Team Owner</option>
-                        <option value="viewer">Viewer</option>
-                    </select>
-                </div>
-            </div>
-            
-            <button class="login-btn-premium" onclick="login(event)">Login / Register</button>
-            <small class="notice-text">⚡ Demo mode: Anonymous Firebase login. Email/password fields are only for display.</small>
+  <header class="topbar">
+    <a class="brand" href="#" onclick="show('dash'); return false;">
+      <span class="brand-icon">🏏</span>
+      <span>Smart Cricket<small>Online Player Auction</small></span>
+    </a>
+
+    <div id="userTools" class="user-tools" hidden>
+      <button class="icon-btn" title="Settings" onclick="openSettings()">⚙️</button>
+      <button class="profile-btn" onclick="toggleProfile()" title="My profile">
+        <span class="avatar">👤</span>
+        <span class="profile-label">My Account</span>
+        <span>▾</span>
+      </button>
+      <div id="profileMenu" class="profile-menu" hidden>
+        <div class="profile-info">
+          <div class="avatar large">👤</div>
+          <strong id="profileEmail">User</strong>
+          <small id="profileRole">Viewer</small>
+        </div>
+        <button onclick="openSettings()">⚙️ Account Settings</button>
+        <button class="danger-text" onclick="logout()">↪ Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="message" class="message" hidden></div>
+
+    <section id="login" class="login-layout">
+      <div class="login-intro">
+        <span class="eyebrow">THE NEXT BIG AUCTION</span>
+        <h1>Build your dream<br><span>cricket team.</span></h1>
+        <p>Register players, manage teams and compete in a live cricket auction.</p>
+        <div class="feature-pills">
+          <span>🏏 Live Auction</span>
+          <span>👥 Team Management</span>
+          <span>📊 Dashboard</span>
+        </div>
+      </div>
+
+      <div class="box login-box">
+        <div class="login-heading">
+          <span class="login-symbol">🏆</span>
+          <h2>Welcome back</h2>
+          <p>Login or create your account</p>
         </div>
 
-        <div id="app" hidden>
-            <nav>
-                <button onclick="show('dash')">Dashboard</button>
-                <button onclick="show('players')">Players</button>
-                <button onclick="show('teams')">Teams</button>
-                <button onclick="show('auction')">🔴 Live Auction</button>
-                <button onclick="show('history')">History</button>
-                <button onclick="logout()">Logout</button>
-            </nav>
-            <section id="dash">
-                <div class="hero">
-                    <h1>Real-Time Cricket Auction</h1>
-                    <p>Players register, teams bid and every connected phone sees the same auction.</p>
-                    <div class="demo">
-                        <b>🎬 Demo data loaded</b><br>Sample players, teams and a live auction are already available.
-                    </div>
-                </div>
-                <div class="cards">
-                    <div>
-                        👤<b id="pc">0</b><small>Players</small>
-                    </div>
-                    <div>
-                        🏆<b id="tc">0</b><small>Teams</small>
-                    </div>
-                    <div>
-                        🔴<b id="bc">0</b><small>Live Auctions</small>
-                    </div>
-                </div>
-            </section>
-            <section id="players" hidden>
-                <h2>Players</h2>
-                <button onclick="addPlayer()">+ Register Player</button>
-                <div id="plist"></div>
-            </section>
-            <section id="teams" hidden>
-                <h2>Teams</h2>
-                <button onclick="addTeam()">+ Create Team</button>
-                <div id="tlist"></div>
-            </section>
-            <section id="auction" hidden>
-                <h2>Live Auction</h2>
-                <div id="live" class="box">
-                    No live auction yet.
-                </div>
-                <button onclick="startAuction()">Start Another Demo Auction</button>
-            </section>
-            <section id="history" hidden>
-                <h2>Auction History</h2>
-                <div id="hist"></div>
-            </section>
+        <form id="loginForm">
+          <label for="email">Email address</label>
+          <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+
+          <label for="pass">Password</label>
+          <input id="pass" type="password" placeholder="Enter password (6+ characters)" autocomplete="current-password" minlength="6" required>
+
+          <label for="role">Continue as</label>
+          <select id="role">
+            <option value="player">Player</option>
+            <option value="teamOwner">Team Owner</option>
+            <option value="viewer">Viewer</option>
+          </select>
+
+          <button class="primary-btn full-btn" type="submit" id="loginBtn">Login / Register</button>
+        </form>
+        <p class="muted-note">New here? Enter your email and password. If the account does not exist, you'll be asked to create it.</p>
+      </div>
+    </section>
+
+    <section id="app" hidden>
+      <div class="welcome-row">
+        <div>
+          <span class="eyebrow">AUCTION CONTROL CENTER</span>
+          <h1 id="welcomeTitle">Dashboard</h1>
+          <p>Manage your players, teams and live auction.</p>
         </div>
-    </main>
-    <script type="module" src="app.js"></script>
+        <span class="live-chip"><span class="live-dot"></span> Firebase Connected</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-btn active" data-section="dash" onclick="show('dash')">▦ Dashboard</button>
+        <button class="nav-btn" data-section="players" onclick="show('players')">🏏 Players</button>
+        <button class="nav-btn" data-section="teams" onclick="show('teams')">👥 Teams</button>
+        <button class="nav-btn" data-section="auction" onclick="show('auction')">🔴 Live Auction</button>
+        <button class="nav-btn" data-section="history" onclick="show('history')">◷ History</button>
+      </nav>
+
+      <section id="dash" class="page-section">
+        <div class="section-heading">
+          <div><h2>Dashboard Overview</h2><p>Your auction activity at a glance.</p></div>
+        </div>
+        <div class="stats-grid">
+          <button class="stat-card" onclick="show('players')">
+            <span class="stat-icon purple">🏏</span>
+            <span class="stat-label">Total Players</span>
+            <strong id="pc">0</strong>
+            <span class="stat-link">View players →</span>
+          </button>
+          <button class="stat-card" onclick="show('teams')">
+            <span class="stat-icon blue">👥</span>
+            <span class="stat-label">Total Teams</span>
+            <strong id="tc">0</strong>
+            <span class="stat-link">View teams →</span>
+          </button>
+          <button class="stat-card" onclick="show('auction')">
+            <span class="stat-icon orange">🔨</span>
+            <span class="stat-label">Auctions</span>
+            <strong id="bc">0</strong>
+            <span class="stat-link">Open auction →</span>
+          </button>
+        </div>
+
+        <div class="quick-grid">
+          <button class="quick-card" onclick="show('players')"><span>🏏</span><div><strong>Players</strong><small>Browse registered players</small></div><b>→</b></button>
+          <button class="quick-card" onclick="show('teams')"><span>👥</span><div><strong>Teams</strong><small>Manage cricket teams</small></div><b>→</b></button>
+          <button class="quick-card" onclick="show('auction')"><span>🔴</span><div><strong>Live Auction</strong><small>View and place bids</small></div><b>→</b></button>
+        </div>
+      </section>
+
+      <section id="players" class="page-section" hidden>
+        <div class="section-heading">
+          <div><h2>Players</h2><p>All registered auction players.</p></div>
+          <button class="primary-btn" onclick="addPlayer()">＋ Register Player</button>
+        </div>
+        <div id="plist" class="content-grid"></div>
+      </section>
+
+      <section id="teams" class="page-section" hidden>
+        <div class="section-heading">
+          <div><h2>Teams</h2><p>View and create your auction teams.</p></div>
+          <button class="primary-btn" onclick="addTeam()">＋ Create Team</button>
+        </div>
+        <div id="tlist" class="content-grid"></div>
+      </section>
+
+      <section id="auction" class="page-section" hidden>
+        <div class="section-heading">
+          <div><h2>Live Auction</h2><p>Start an auction and place bids.</p></div>
+          <button class="primary-btn" onclick="startAuction()">＋ Start Auction</button>
+        </div>
+        <div id="live" class="box empty-state">Loading auction...</div>
+      </section>
+
+      <section id="history" class="page-section" hidden>
+        <div class="section-heading">
+          <div><h2>Auction History</h2><p>Recent auction records.</p></div>
+        </div>
+        <div id="hist" class="content-grid"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="settingsModal" class="modal-backdrop" hidden onclick="if(event.target===this)closeSettings()">
+    <div class="modal box">
+      <div class="modal-header">
+        <div><span class="eyebrow">YOUR ACCOUNT</span><h2>Settings</h2></div>
+        <button class="icon-btn" onclick="closeSettings()" aria-label="Close settings">✕</button>
+      </div>
+      <div class="settings-user"><div class="avatar large">👤</div><div><strong id="currentEmail">—</strong><small id="settingsRole">Account</small></div></div>
+      <form id="emailForm">
+        <label for="newEmail">New email address</label>
+        <input id="newEmail" type="email" placeholder="newemail@example.com" required>
+        <label for="currentPassword">Confirm current password</label>
+        <input id="currentPassword" type="password" placeholder="Enter current password" autocomplete="current-password" required>
+        <button type="submit" class="primary-btn full-btn">Change Email</button>
+      </form>
+      <p class="muted-note">Firebase may send a verification email. Follow the verification link to finish changing your email.</p>
+      <button class="secondary-btn full-btn" onclick="logout()">↪ Logout</button>
+    </div>
+  </div>
+
+  <footer>Smart Cricket Auction <span>•</span> Powered by Firebase</footer>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
