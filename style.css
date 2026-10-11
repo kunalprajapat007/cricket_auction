@@ -1,28 +1,87 @@
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, sans-serif; background: #f4f7fb; color: #182230; }
-header { background: #111827; color: #fff; padding: 16px 20px; font-size: 20px; }
+body { 
+    margin: 0; 
+    font-family: Arial, sans-serif; 
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); 
+    color: #e2e8f0; 
+    min-height: 100vh;
+}
+header { background: #111827; color: #fff; padding: 16px 20px; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 header span { font-size: 14px; margin-left: 10px; opacity: .8; }
 main { max-width: 950px; margin: 24px auto; padding: 0 14px; }
-.box, .hero, .player, .team, .card { background: #fff; border-radius: 14px; padding: 18px; margin: 12px 0; box-shadow: 0 3px 14px #00000012; }
+.box, .hero, .player, .team, .card { background: rgba(255, 255, 255, 0.05); border-radius: 14px; padding: 18px; margin: 12px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); }
 #login { max-width: 440px; margin: 50px auto; }
-.box input, .box select { display: block; width: 100%; padding: 12px; margin: 9px 0; border: 1px solid #d7dce5; border-radius: 9px; }
-.box button, button { border: 0; border-radius: 9px; padding: 11px 15px; margin: 5px 5px 5px 0; cursor: pointer; background: #2563eb; color: #fff; font-weight: 600; }
-nav { display: flex; flex-wrap: wrap; margin-bottom: 16px; }
+.box input, .box select { display: block; width: 100%; padding: 12px; margin: 12px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 9px; background: rgba(255, 255, 255, 0.08); color: #fff; transition: all 0.3s ease; }
+.box input::placeholder { color: #a0aec0; }
+.box input:focus, .box select:focus { outline: none; border-color: #00e676; box-shadow: 0 0 10px rgba(0, 230, 118, 0.4); background: rgba(255, 255, 255, 0.12); }
+.box button, button { border: 0; border-radius: 9px; padding: 11px 15px; margin: 5px 5px 5px 0; cursor: pointer; background: #2563eb; color: #fff; font-weight: 600; transition: all 0.2s ease; }
+button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+nav { display: flex; flex-wrap: wrap; margin-bottom: 16px; gap: 6px; }
 nav button:last-child { background: #6b7280; }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
-.cards>div { background: #fff; padding: 20px; border-radius: 14px; text-align: center; box-shadow: 0 3px 14px #00000012; font-size: 28px; }
-.cards b { display: block; font-size: 28px; margin: 7px; }
-.cards small { font-size: 13px; color: #667085; }
-.price { font-weight: bold; margin-top: 7px; }
-.demo { background: #eef6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 10px; margin-top: 12px; }
-small { display: block; color: #667085; margin-top: 10px; }
+.cards>div { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 14px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); font-size: 28px; }
+.cards b { display: block; font-size: 28px; margin: 7px; color: #fff; }
+.cards small { font-size: 13px; color: #a0aec0; }
+.price { font-weight: bold; margin-top: 7px; color: #00e676; }
+.demo { background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3); padding: 12px; border-radius: 10px; margin-top: 12px; color: #bfdbfe; }
+small { display: block; color: #a0aec0; margin-top: 10px; }
 @media(max-width:650px) {
   .cards { grid-template-columns: 1fr; }
   .cards>div { padding: 14px; }
   header { font-size: 17px; }
 }
 [hidden] { display: none !important; }
-nav button.active {
-    background: #059669 !important; /* सिलेक्ट होने पर यह बढ़िया हरा रंग दिखेगा */
-    color: #fff !important;
+nav button.active { background: #059669 !important; color: #fff !important; }
+
+/* Glassmorphism login window layout */
+.login-glassmorphism {
+    background: rgba(255, 255, 255, 0.04) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    padding: 35px 30px !important;
+    text-align: center;
+}
+.login-glassmorphism h1 { font-size: 26px; color: #fff; margin: 10px 0; }
+.tagline { color: #a0aec0; font-size: 14px; margin-bottom: 25px; }
+.cricket-icon { font-size: 3rem; animation: bounce 2s infinite ease-in-out; }
+.box select option { background: #1a2c33; color: #fff; }
+
+.login-btn-premium {
+    width: 100%;
+    padding: 14px !important;
+    background: linear-gradient(135deg, #00e676 0%, #00b0ff 100%) !important;
+    color: white !important;
+    border: none;
+    border-radius: 9px;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 15px !important;
+    box-shadow: 0 4px 15px rgba(0, 230, 118, 0.3);
+}
+.login-btn-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 230, 118, 0.5);
+}
+.notice-text { font-size: 11.5px; color: #718096; line-height: 1.4; display: block; margin-top: 15px; }
+
+/* Global wave ripples impact click layout */
+.global-click-ripple {
+    position: absolute;
+    border: 2px solid #00e676;
+    border-radius: 50%;
+    background: rgba(0, 230, 118, 0.15);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: clickBlast 0.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    z-index: 99999;
+}
+
+@keyframes clickBlast {
+    0% { width: 0px; height: 0px; opacity: 1; }
+    100% { width: 70px; height: 70px; opacity: 0; }
+}
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
 }
