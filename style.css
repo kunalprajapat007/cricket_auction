@@ -33,7 +33,7 @@ small { display: block; color: #a0aec0; margin-top: 10px; }
 [hidden] { display: none !important; }
 nav button.active { background: #059669 !important; color: #fff !important; }
 
-/* Glassmorphism login window layout */
+/* Glassmorphism setup */
 .login-glassmorphism {
     background: rgba(255, 255, 255, 0.04) !important;
     backdrop-filter: blur(16px);
@@ -65,7 +65,7 @@ nav button.active { background: #059669 !important; color: #fff !important; }
 }
 .notice-text { font-size: 11.5px; color: #718096; line-height: 1.4; display: block; margin-top: 15px; }
 
-/* Global wave ripples impact click layout */
+/* Global wave click config */
 .global-click-ripple {
     position: absolute;
     border: 2px solid #00e676;
