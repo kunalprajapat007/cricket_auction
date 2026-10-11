@@ -16,11 +16,11 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  setDoc,
-  getDoc,
-  getDocs,
   serverTimestamp,
-  runTransaction
+  getDoc,
+  setDoc,
+  runTransaction,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
 import { firebaseConfig } from "./firebase-config.js";
@@ -33,7 +33,6 @@ const db = getFirestore(fb);
 let unsubs = [];
 
 const $ = (id) => document.getElementById(id);
-
 const money = (n) =>
   "₹" + Number(n || 0).toLocaleString("en-IN");
 
@@ -58,21 +57,17 @@ window.login = async (event) => {
   }
 
   try {
-    // Existing account se login
     await signInWithEmailAndPassword(auth, email, password);
     localStorage.setItem("auctionRole", role);
-
   } catch (error) {
     console.error("Login error:", error.code, error.message);
 
-    // Agar account nahi mila, toh registration ka option
     if (
       error.code === "auth/invalid-credential" ||
       error.code === "auth/user-not-found"
     ) {
       const register = confirm(
-        "Login nahi hua. Email/password check karo.\n\n" +
-        "Kya tum is email se naya account banana chahte ho?"
+        "Login nahi hua. Kya tum is email se naya account banana chahte ho?"
       );
 
       if (!register) return;
@@ -81,25 +76,17 @@ window.login = async (event) => {
         await createUserWithEmailAndPassword(auth, email, password);
         localStorage.setItem("auctionRole", role);
         alert("Account successfully create ho gaya!");
+      } catch (e) {
+        console.error("Register error:", e.code, e.message);
 
-      } catch (registerError) {
-        console.error("Register error:", registerError.code);
-
-        if (registerError.code === "auth/email-already-in-use") {
-          alert("Ye email pehle se registered hai. Sahi password enter karo.");
-        } else if (registerError.code === "auth/operation-not-allowed") {
-          alert("Firebase Console mein Email/Password enable karo.");
-        } else if (registerError.code === "auth/weak-password") {
-          alert("Password aur strong rakho.");
+        if (e.code === "auth/email-already-in-use") {
+          alert("Ye email registered hai. Sahi password se login karo.");
         } else {
-          alert("Registration failed: " + registerError.message);
+          alert("Registration failed: " + e.message);
         }
       }
-
     } else if (error.code === "auth/operation-not-allowed") {
-      alert("Firebase Console mein Email/Password sign-in enable karo.");
-    } else if (error.code === "auth/invalid-email") {
-      alert("Valid email address enter karo.");
+      alert("Firebase Console mein Email/Password enable karo.");
     } else {
       alert("Login failed: " + error.message);
     }
@@ -132,10 +119,10 @@ onAuthStateChanged(auth, async (user) => {
       window.show("dash");
     } catch (error) {
       console.error("Dashboard error:", error);
-      alert("Dashboard load nahi hua: " + error.message);
+      alert("Dashboard error: " + error.message);
     }
   } else {
-    unsubs.forEach((unsubscribe) => unsubscribe());
+    unsubs.forEach((fn) => fn());
     unsubs = [];
 
     if ($("login")) $("login").hidden = false;
@@ -144,94 +131,72 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ===============================
-// PAGE NAVIGATION
+// NAVIGATION
 // ===============================
 window.show = (id) => {
-  const tabs = ["dash", "players", "teams", "auction", "history"];
-
-  tabs.forEach((tab) => {
+  ["dash", "players", "teams", "auction", "history"].forEach((tab) => {
     const element = $(tab);
     if (element) element.hidden = tab !== id;
-  });
-
-  document.querySelectorAll("nav button").forEach((button) => {
-    button.classList.toggle(
-      "active",
-      button.getAttribute("onclick") === `show('${id}')`
-    );
   });
 };
 
 // ===============================
 // DEMO DATA
-// Existing data ko baar-baar overwrite nahi karega
 // ===============================
 async function seedDemoData() {
   const players = [
     {
       id: "demo_player_1",
-      data: {
-        name: "Virat Demo",
-        role: "Batsman",
-        basePrice: 100000,
-        status: "PENDING",
-        demo: true
-      }
+      name: "Virat Demo",
+      role: "Batsman",
+      basePrice: 100000
     },
     {
       id: "demo_player_2",
-      data: {
-        name: "Rohit Demo",
-        role: "Batsman",
-        basePrice: 150000,
-        status: "PENDING",
-        demo: true
-      }
+      name: "Rohit Demo",
+      role: "Batsman",
+      basePrice: 150000
     },
     {
       id: "demo_player_3",
-      data: {
-        name: "Jasprit Demo",
-        role: "Bowler",
-        basePrice: 200000,
-        status: "PENDING",
-        demo: true
-      }
+      name: "Jasprit Demo",
+      role: "Bowler",
+      basePrice: 200000
     },
     {
       id: "demo_player_4",
-      data: {
-        name: "Hardik Demo",
-        role: "All-Rounder",
-        basePrice: 250000,
-        status: "PENDING",
-        demo: true
-      }
+      name: "Hardik Demo",
+      role: "All-Rounder",
+      basePrice: 250000
     }
   ];
 
-  for (const player of players) {
-    const ref = doc(db, "players", player.id);
-    const existing = await getDoc(ref);
+  for (const p of players) {
+    const ref = doc(db, "players", p.id);
+    const snap = await getDoc(ref);
 
-    if (!existing.exists()) {
-      await setDoc(ref, player.data);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        ...p,
+        status: "PENDING",
+        demo: true
+      });
     }
   }
 
   const teams = [
-    { id: "demo_team_1", name: "Ahmedabad Warriors" },
-    { id: "demo_team_2", name: "Mumbai Strikers" },
-    { id: "demo_team_3", name: "Delhi Challengers" }
+    ["demo_team_1", "Ahmedabad Warriors"],
+    ["demo_team_2", "Mumbai Strikers"],
+    ["demo_team_3", "Delhi Challengers"]
   ];
 
-  for (const team of teams) {
-    const ref = doc(db, "teams", team.id);
-    const existing = await getDoc(ref);
+  for (const [id, name] of teams) {
+    const ref = doc(db, "teams", id);
+    const snap = await getDoc(ref);
 
-    if (!existing.exists()) {
+    if (!snap.exists()) {
       await setDoc(ref, {
-        name: team.name,
+        name,
         purse: 5000000,
         spent: 0,
         squad: [],
@@ -241,9 +206,9 @@ async function seedDemoData() {
   }
 
   const auctionRef = doc(db, "auctions", "demo_auction_1");
-  const auction = await getDoc(auctionRef);
+  const auctionSnap = await getDoc(auctionRef);
 
-  if (!auction.exists()) {
+  if (!auctionSnap.exists()) {
     await setDoc(auctionRef, {
       name: "Live Demo Auction",
       playerName: "Hardik Demo",
@@ -258,128 +223,106 @@ async function seedDemoData() {
 }
 
 // ===============================
-// REAL-TIME LISTENERS
+// REAL-TIME DATA
 // ===============================
 function listen() {
-  unsubs.forEach((unsubscribe) => unsubscribe());
+  unsubs.forEach((fn) => fn());
   unsubs = [];
 
   unsubs.push(
-    onSnapshot(
-      collection(db, "players"),
-      (snapshot) => {
-        const players = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        }));
+    onSnapshot(collection(db, "players"), (snap) => {
+      const players = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
 
-        if ($("pc")) $("pc").textContent = players.length;
+      if ($("pc")) $("pc").textContent = players.length;
 
-        if ($("plist")) {
-          $("plist").innerHTML = players.map((p) => `
-            <div class="player">
-              <b>${p.name || "Unnamed player"}</b><br>
-              ${p.role || ""}
-              <div class="price">${money(p.basePrice)}</div>
-              <small>Status: ${p.status || "PENDING"}</small>
-            </div>
-          `).join("") || "No players yet.";
-        }
-      },
-      (error) => console.error("Players error:", error)
-    )
+      if ($("plist")) {
+        $("plist").innerHTML = players.map((p) => `
+          <div class="player">
+            <b>${p.name || "Player"}</b><br>
+            ${p.role || ""}
+            <div class="price">${money(p.basePrice)}</div>
+            <small>Status: ${p.status || "PENDING"}</small>
+          </div>
+        `).join("") || "No players yet.";
+      }
+    }, (e) => console.error("Players error:", e))
   );
 
   unsubs.push(
-    onSnapshot(
-      collection(db, "teams"),
-      (snapshot) => {
-        const teams = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        }));
+    onSnapshot(collection(db, "teams"), (snap) => {
+      const teams = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
 
-        if ($("tc")) $("tc").textContent = teams.length;
+      if ($("tc")) $("tc").textContent = teams.length;
 
-        if ($("tlist")) {
-          $("tlist").innerHTML = teams.map((t) => `
-            <div class="team">
-              <b>🏆 ${t.name || "Unnamed team"}</b><br>
-              Purse: ${money(t.purse)}<br>
-              Spent: ${money(t.spent)}
-            </div>
-          `).join("") || "No teams yet.";
-        }
-      },
-      (error) => console.error("Teams error:", error)
-    )
+      if ($("tlist")) {
+        $("tlist").innerHTML = teams.map((t) => `
+          <div class="team">
+            <b>🏆 ${t.name}</b><br>
+            Purse: ${money(t.purse)}<br>
+            Spent: ${money(t.spent)}
+          </div>
+        `).join("") || "No teams yet.";
+      }
+    }, (e) => console.error("Teams error:", e))
   );
 
   unsubs.push(
-    onSnapshot(
-      collection(db, "auctions"),
-      (snapshot) => {
-        const auctions = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        }));
+    onSnapshot(collection(db, "auctions"), (snap) => {
+      const auctions = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
 
-        const live = auctions.filter((a) => a.status === "LIVE");
+      const live = auctions.filter((a) => a.status === "LIVE");
 
-        if ($("bc")) $("bc").textContent = live.length;
+      if ($("bc")) $("bc").textContent = live.length;
 
-        if ($("live")) {
-          $("live").innerHTML = live.map((a) => `
+      if ($("live")) {
+        $("live").innerHTML = live.map((a) => `
+          <div class="box">
+            <h2>🔴 ${a.name || "Live Auction"}</h2>
+            <p>Player: <b>${a.playerName || "Unknown"}</b></p>
+            <p>Current bid: <b>${money(a.currentBid)}</b></p>
+            <p>Highest team: ${a.highestTeamName || "No bid"}</p>
+            <button onclick="bid('${a.id}')">Bid + ₹50,000</button>
+          </div>
+        `).join("") || "No live auction yet.";
+      }
+
+      if ($("hist")) {
+        $("hist").innerHTML = auctions
+          .filter((a) => a.status === "SOLD")
+          .map((a) => `
             <div class="box">
-              <h2>🔴 ${a.name || "Live Auction"}</h2>
-              <p>Player: <b>${a.playerName || "Unknown"}</b></p>
-              <p>Current bid: <b>${money(a.currentBid)}</b></p>
-              <p>Highest team: ${a.highestTeamName || "No bid"}</p>
-              <button onclick="bid('${a.id}')">
-                Bid + ₹50,000
-              </button>
+              <b>🏏 ${a.playerName}</b> SOLD to
+              <b>🏆 ${a.highestTeamName}</b>
+              for <span class="price">${money(a.currentBid)}</span>
             </div>
-          `).join("") || "No live auction yet.";
-        }
-
-        if ($("hist")) {
-          $("hist").innerHTML = auctions
-            .filter((a) => a.status === "SOLD")
-            .map((a) => `
-              <div class="box">
-                <b>🏏 ${a.playerName || "Player"}</b>
-                SOLD to
-                <b>🏆 ${a.highestTeamName || "Unknown team"}</b>
-                for
-                <span class="price">${money(a.currentBid)}</span>
-              </div>
-            `).join("") || "No history yet.";
-        }
-      },
-      (error) => console.error("Auction error:", error)
-    )
+          `).join("") || "No history yet.";
+      }
+    }, (e) => console.error("Auctions error:", e))
   );
 }
 
 // ===============================
-// REGISTER PLAYER
+// ADD PLAYER
 // ===============================
 window.addPlayer = async () => {
-  const name = prompt("Player ka naam enter karo:");
-  if (!name || !name.trim()) return;
+  const name = prompt("Player name:");
+  if (!name?.trim()) return;
 
-  const role = prompt(
-    "Player role enter karo (Batsman/Bowler/All-Rounder):",
-    "Batsman"
-  );
-  if (!role) return;
+  const role = prompt("Player role:", "Batsman");
+  if (!role?.trim()) return;
 
-  const priceInput = prompt("Base price enter karo:", "100000");
-  if (priceInput === null) return;
+  const price = Number(prompt("Base price:", "100000"));
 
-  const basePrice = Number(priceInput);
-
-  if (!Number.isFinite(basePrice) || basePrice < 0) {
+  if (!Number.isFinite(price) || price < 0) {
     alert("Valid base price enter karo.");
     return;
   }
@@ -388,23 +331,21 @@ window.addPlayer = async () => {
     await addDoc(collection(db, "players"), {
       name: name.trim(),
       role: role.trim(),
-      basePrice,
+      basePrice: price,
       status: "PENDING",
       createdAt: serverTimestamp()
     });
-
-    alert("Player successfully registered!");
-  } catch (error) {
-    alert("Player add nahi hua: " + error.message);
+  } catch (e) {
+    alert("Player add failed: " + e.message);
   }
 };
 
 // ===============================
-// CREATE TEAM
+// ADD TEAM
 // ===============================
 window.addTeam = async () => {
-  const name = prompt("Team ka naam enter karo:");
-  if (!name || !name.trim()) return;
+  const name = prompt("Team name:");
+  if (!name?.trim()) return;
 
   try {
     await addDoc(collection(db, "teams"), {
@@ -414,48 +355,44 @@ window.addTeam = async () => {
       squad: [],
       createdAt: serverTimestamp()
     });
-
-    alert("Team successfully create ho gayi!");
-  } catch (error) {
-    alert("Team create nahi hui: " + error.message);
+  } catch (e) {
+    alert("Team add failed: " + e.message);
   }
 };
 
 // ===============================
-// START ANOTHER AUCTION
+// START AUCTION
 // ===============================
 window.startAuction = async () => {
   try {
-    const snapshot = await getDocs(collection(db, "players"));
+    const snap = await getDocs(collection(db, "players"));
 
-    const players = snapshot.docs
+    const players = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((p) => p.status === "PENDING");
 
-    if (players.length === 0) {
-      alert("Koi pending player nahi hai. Pehle player register karo.");
+    if (!players.length) {
+      alert("Koi pending player nahi hai.");
       return;
     }
 
-    const player = players[0];
+    const p = players[0];
 
     await addDoc(collection(db, "auctions"), {
-      name: player.name + " Auction",
-      playerName: player.name,
-      playerId: player.id,
+      name: p.name + " Auction",
+      playerName: p.name,
+      playerId: p.id,
       status: "LIVE",
-      currentBid: Number(player.basePrice || 0),
+      currentBid: Number(p.basePrice || 0),
       highestTeamName: "No bid",
       createdAt: serverTimestamp()
     });
 
-    await updateDoc(doc(db, "players", player.id), {
+    await updateDoc(doc(db, "players", p.id), {
       status: "LIVE"
     });
-
-    alert(player.name + " ka auction start ho gaya!");
-  } catch (error) {
-    alert("Auction start nahi hua: " + error.message);
+  } catch (e) {
+    alert("Auction start failed: " + e.message);
   }
 };
 
@@ -463,34 +400,31 @@ window.startAuction = async () => {
 // PLACE BID
 // ===============================
 window.bid = async (auctionId) => {
-  const teamName = prompt("Bid karne wali team ka exact naam enter karo:");
-  if (!teamName || !teamName.trim()) return;
+  const teamName = prompt("Team name enter karo:");
+  if (!teamName?.trim()) return;
 
   try {
-    const auctionRef = doc(db, "auctions", auctionId);
+    const ref = doc(db, "auctions", auctionId);
 
     await runTransaction(db, async (transaction) => {
-      const auctionSnap = await transaction.get(auctionRef);
+      const snap = await transaction.get(ref);
 
-      if (!auctionSnap.exists()) {
-        throw new Error("Auction nahi mila.");
+      if (!snap.exists()) throw new Error("Auction nahi mila.");
+
+      const a = snap.data();
+
+      if (a.status !== "LIVE") {
+        throw new Error("Auction live nahi hai.");
       }
 
-      const auction = auctionSnap.data();
-
-      if (auction.status !== "LIVE") {
-        throw new Error("Ye auction ab LIVE nahi hai.");
-      }
-
-      transaction.update(auctionRef, {
-        currentBid: Number(auction.currentBid || 0) + 50000,
+      transaction.update(ref, {
+        currentBid: Number(a.currentBid || 0) + 50000,
         highestTeamName: teamName.trim(),
         updatedAt: serverTimestamp()
       });
     });
-
-  } catch (error) {
-    alert("Bid failed: " + error.message);
+  } catch (e) {
+    alert("Bid failed: " + e.message);
   }
 };
 
@@ -502,7 +436,6 @@ window.addEventListener("click", (event) => {
   ripple.className = "global-click-ripple";
   ripple.style.left = event.pageX + "px";
   ripple.style.top = event.pageY + "px";
-
   document.body.appendChild(ripple);
 
   setTimeout(() => ripple.remove(), 500);
