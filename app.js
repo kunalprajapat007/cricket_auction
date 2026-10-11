@@ -1,7 +1,16 @@
+import {initializeApp} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInAnonymously,signOut} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import {getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,serverTimestamp,getDoc,setDoc,runTransaction} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import {firebaseConfig} from "./firebase-config.js";
+const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);let unsubs=[];
+const $=x=>document.getElementById(x), money=n=>"₹"+Number(n||0).toLocaleString("en-IN");
+window.login = async (event) => {
+  if (event) event.preventDefault();
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://gstatic.com";
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://gstatic.com";
+import { getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword, signOut} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore,collection,addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+
 
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
