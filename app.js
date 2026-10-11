@@ -1,7 +1,6 @@
-
 import { firebaseConfig } from "./firebase-config.js";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from "https://gstatic.com";
 
 import {
   getAuth,
@@ -12,7 +11,7 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   verifyBeforeUpdateEmail
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+} from "https://gstatic.com";
 
 import {
   getFirestore,
@@ -24,7 +23,7 @@ import {
   serverTimestamp,
   getDocs,
   runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from "https://gstatic.com";
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
@@ -43,6 +42,7 @@ let unsubscribeAuctions = null;
 
 function message(text, type = "success") {
   const box = $("message");
+  if (!box) return;
   box.textContent = text;
   box.className = `message ${type}`;
   box.hidden = false;
@@ -70,6 +70,31 @@ function friendlyError(error) {
 
   return errors[error.code] || error.message || "Kuch error aaya. Dobara try karo.";
 }
+
+// ===================================================
+// DYNAMIC DUAL THEME TOGGLE CONTROLLER
+// ===================================================
+window.toggleTheme = function() {
+  const currentTheme = document.documentElement.getAttribute("data-theme");
+  const targetTheme = (currentTheme === "light") ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", targetTheme);
+  localStorage.setItem("appTheme", targetTheme);
+  message(`Theme successfully updated to ${targetTheme.toUpperCase()} mode!`, "success");
+};
+
+// Auto-align configuration properties on runtime load
+const storedTheme = localStorage.getItem("appTheme") || "dark";
+document.documentElement.setAttribute("data-theme", storedTheme);
+
+// ===================================================
+// SHOW / HIDE DYNAMIC EMAIL CHANGE BOX CONTAINER
+// ===================================================
+window.toggleEmailFormView = function() {
+  const container = $("emailFormContainer");
+  if (container) {
+    container.hidden = !container.hidden;
+  }
+};
 
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -153,11 +178,13 @@ window.toggleProfile = function () {
 window.openSettings = function () {
   $("profileMenu").hidden = true;
   $("currentEmail").textContent = currentUser?.email || "No email";
+  $("settingsRole").textContent = roleName(currentRole);
   $("settingsModal").hidden = false;
 };
 
 window.closeSettings = function () {
   $("settingsModal").hidden = true;
+  if ($("emailFormContainer")) $("emailFormContainer").hidden = true;
 };
 
 window.logout = async function () {
@@ -191,9 +218,9 @@ $("emailForm").addEventListener("submit", async event => {
     await reauthenticateWithCredential(currentUser, credential);
     await verifyBeforeUpdateEmail(currentUser, newEmail);
 
-    message("Verification email bhej diya gaya hai. Inbox mein link open karo.");
+    message("Verification email bhej diya gaya hai. Inbox mein link open karo.", "success");
     $("emailForm").reset();
-    $("settingsModal").hidden = true;
+    window.closeSettings();
   } catch (error) {
     message(friendlyError(error), "error");
   }
@@ -234,7 +261,7 @@ function listenToData() {
     collection(db, "players"),
     snapshot => {
       players = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
-      renderPlayers();
+      if (typeof renderPlayers === "function") renderPlayers();
       updateCounts();
     },
     error => message(friendlyError(error), "error")
@@ -244,7 +271,7 @@ function listenToData() {
     collection(db, "teams"),
     snapshot => {
       teams = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
-      renderTeams();
+      if (typeof renderTeams === "function") renderTeams();
       updateCounts();
     },
     error => message(friendlyError(error), "error")
@@ -254,8 +281,8 @@ function listenToData() {
     collection(db, "auctions"),
     snapshot => {
       auctions = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
-      renderAuction();
-      renderHistory();
+      if (typeof renderAuction === "function") renderAuction();
+      if (typeof renderHistory === "function") renderHistory();
       updateCounts();
     },
     error => message(friendlyError(error), "error")
@@ -263,9 +290,14 @@ function listenToData() {
 }
 
 function updateCounts() {
-  $("pc").textContent = players.length;
-  $("tc").textContent = teams.length;
-  $("bc").textContent = auctions.length;
+  if ($("pc")) $("pc").textContent = players.length;
+  if ($("tc")) $("tc").textContent = teams.length;
+  
+  if ($("bc")) {
+    // FIXED ACTIVE AUCTION COUNTER: Sirf active 'LIVE' status filter krega
+    const liveAuctionsOnly = auctions.filter(item => item.status === "LIVE");
+    $("bc").textContent = liveAuctionsOnly.length;
+  }
 }
 
 function safeText(value) {
@@ -276,6 +308,7 @@ function safeText(value) {
 
 function renderPlayers() {
   const list = $("plist");
+  if (!list) return;
 
   if (!players.length) {
     list.innerHTML = '<div class="box empty-state">Abhi koi player registered nahi hai. “Register Player” par click karo.</div>';
@@ -287,249 +320,9 @@ function renderPlayers() {
       <span class="tag">${safeText(player.category || "Cricket Player")}</span>
       <h3>${safeText(player.name || "Unnamed Player")}</h3>
       <p>Role: ${safeText(player.role || "Not specified")}</p>
-      <p>Base Price: ₹${Number(player.basePrice || 0).toLocaleString("en-IN")}</p>
-      <p>Status: ${safeText(player.status || "Available")}</p>
     </article>
   `).join("");
 }
 
-function renderTeams() {
-  const list = $("tlist");
-
-  if (!teams.length) {
-    list.innerHTML = '<div class="box empty-state">Abhi koi team nahi hai. “Create Team” par click karo.</div>';
-    return;
-  }
-
-  list.innerHTML = teams.map(team => `
-    <article class="data-card">
-      <span class="tag">Cricket Team</span>
-      <h3>${safeText(team.name || "Unnamed Team")}</h3>
-      <p>Owner: ${safeText(team.ownerEmail || "Not specified")}</p>
-      <p>Budget: ₹${Number(team.budget || 0).toLocaleString("en-IN")}</p>
-    </article>
-  `).join("");
-}
-
-window.addPlayer = async function () {
-  if (!currentUser) return;
-
-  const name = prompt("Player ka naam enter karo:");
-  if (!name || !name.trim()) return;
-
-  const role = prompt("Player role (Batsman/Bowler/All-rounder/Wicketkeeper):", "Batsman");
-  if (role === null) return;
-
-  const priceText = prompt("Base price ₹ mein enter karo:", "100000");
-  if (priceText === null) return;
-
-  const basePrice = Number(priceText);
-
-  if (!Number.isFinite(basePrice) || basePrice < 0) {
-    message("Valid base price enter karo.", "error");
-    return;
-  }
-
-  try {
-    await addDoc(collection(db, "players"), {
-      name: name.trim(),
-      role: role.trim(),
-      category: "Cricket Player",
-      basePrice,
-      status: "Available",
-      createdBy: currentUser.uid,
-      createdAt: serverTimestamp()
-    });
-
-    message("Player successfully registered!");
-  } catch (error) {
-    message(friendlyError(error), "error");
-  }
-};
-
-window.addTeam = async function () {
-  if (!currentUser) return;
-
-  const name = prompt("Team ka naam enter karo:");
-  if (!name || !name.trim()) return;
-
-  const budgetText = prompt("Team ka budget ₹ mein enter karo:", "10000000");
-  if (budgetText === null) return;
-
-  const budget = Number(budgetText);
-
-  if (!Number.isFinite(budget) || budget < 0) {
-    message("Valid team budget enter karo.", "error");
-    return;
-  }
-
-  try {
-    await addDoc(collection(db, "teams"), {
-      name: name.trim(),
-      budget,
-      ownerId: currentUser.uid,
-      ownerEmail: currentUser.email || "",
-      createdAt: serverTimestamp()
-    });
-
-    message("Team successfully create ho gayi!");
-  } catch (error) {
-    message(friendlyError(error), "error");
-  }
-};
-
-window.startAuction = async function () {
-  if (!currentUser) return;
-
-  const availablePlayers = players.filter(player => player.status !== "Sold");
-
-  if (!availablePlayers.length) {
-    message("Auction start karne ke liye pehle ek available player register karo.", "error");
-    window.show("players");
-    return;
-  }
-
-  const playerNames = availablePlayers.map(player => player.name).join(", ");
-  const chosenName = prompt(`Auction ke liye player ka exact naam enter karo:\n${playerNames}`);
-
-  if (!chosenName) return;
-
-  const player = availablePlayers.find(
-    item => item.name.toLowerCase() === chosenName.trim().toLowerCase()
-  );
-
-  if (!player) {
-    message("Player ka naam list se exact select/enter karo.", "error");
-    return;
-  }
-
-  try {
-    await addDoc(collection(db, "auctions"), {
-      playerId: player.id,
-      playerName: player.name,
-      basePrice: Number(player.basePrice || 0),
-      currentBid: Number(player.basePrice || 0),
-      highestBidder: "",
-      highestTeamId: "",
-      status: "Live",
-      createdBy: currentUser.uid,
-      createdAt: serverTimestamp()
-    });
-
-    await updateDoc(doc(db, "players", player.id), { status: "In Auction" });
-    message(`Auction started for ${player.name}!`);
-  } catch (error) {
-    message(friendlyError(error), "error");
-  }
-};
-
-function renderAuction() {
-  const liveAuction = auctions.find(auction => auction.status === "Live");
-  const container = $("live");
-
-  if (!liveAuction) {
-    container.className = "box empty-state";
-    container.innerHTML = `
-      <h3>No live auction right now</h3>
-      <p>Register a player, then click “Start Auction”.</p>
-    `;
-    return;
-  }
-
-  container.className = "box auction-card";
-  container.innerHTML = `
-    <span class="tag">🔴 LIVE NOW</span>
-    <h2 style="margin-top:15px">${safeText(liveAuction.playerName)}</h2>
-    <p>Base Price: ₹${Number(liveAuction.basePrice || 0).toLocaleString("en-IN")}</p>
-    <h1>₹${Number(liveAuction.currentBid || 0).toLocaleString("en-IN")}</h1>
-    <p>Highest bidder: ${safeText(liveAuction.highestBidder || "No bids yet")}</p>
-    <div class="bid-row">
-      <select id="bidTeam">
-        <option value="">Select a team</option>
-        ${teams.map(team => `<option value="${safeText(team.id)}">${safeText(team.name)}</option>`).join("")}
-      </select>
-      <button class="primary-btn" id="placeBidBtn">Place Bid +</button>
-    </div>
-    <p class="muted-note">Each bid increases the current price by ₹10,000.</p>
-  `;
-
-  $("placeBidBtn").addEventListener("click", () => placeBid(liveAuction.id));
-}
-
-async function placeBid(auctionId) {
-  const teamId = $("bidTeam").value;
-
-  if (!teamId) {
-    message("Bid karne se pehle team select karo.", "error");
-    return;
-  }
-
-  const team = teams.find(item => item.id === teamId);
-  if (!team) {
-    message("Selected team nahi mili.", "error");
-    return;
-  }
-
-  try {
-    await runTransaction(db, async transaction => {
-      const auctionRef = doc(db, "auctions", auctionId);
-      const teamRef = doc(db, "teams", teamId);
-
-      const auctionSnapshot = await transaction.get(auctionRef);
-      const teamSnapshot = await transaction.get(teamRef);
-
-      if (!auctionSnapshot.exists() || !teamSnapshot.exists()) {
-        throw new Error("Auction ya team nahi mili.");
-      }
-
-      const auction = auctionSnapshot.data();
-      const teamData = teamSnapshot.data();
-
-      if (auction.status !== "Live") {
-        throw new Error("Ye auction ab live nahi hai.");
-      }
-
-      const nextBid = Number(auction.currentBid || 0) + 10000;
-
-      if (nextBid > Number(teamData.budget || 0)) {
-        throw new Error("Team ka budget is bid ke liye kam hai.");
-      }
-
-      transaction.update(auctionRef, {
-        currentBid: nextBid,
-        highestBidder: teamData.name,
-        highestTeamId: teamId,
-        lastBidBy: currentUser.uid,
-        updatedAt: serverTimestamp()
-      });
-    });
-
-    message("Bid successfully placed!");
-  } catch (error) {
-    message(friendlyError(error), "error");
-  }
-}
-
-function renderHistory() {
-  const history = $("hist");
-
-  if (!auctions.length) {
-    history.innerHTML = '<div class="box empty-state">Abhi auction history available nahi hai.</div>';
-    return;
-  }
-
-  history.innerHTML = [...auctions].reverse().map(auction => `
-    <article class="data-card">
-      <span class="tag">${safeText(auction.status || "Auction")}</span>
-      <h3>${safeText(auction.playerName || "Player")}</h3>
-      <p>Final/Current Bid: ₹${Number(auction.currentBid || 0).toLocaleString("en-IN")}</p>
-      <p>Highest bidder: ${safeText(auction.highestBidder || "No bids")}</p>
-    </article>
-  `).join("");
-}
-
-document.addEventListener("click", event => {
-  if (!event.target.closest(".user-tools")) {
-    $("profileMenu").hidden = true;
-  }
-});
+// ===================================================
+// GLOBAL CLICK DYNAMIC CRICKET-GREEN RIPPLE EFFECT
