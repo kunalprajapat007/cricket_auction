@@ -1,4 +1,4 @@
-import { initializeApp } from "https://gstatic.com";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://gstatic.com";
 import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://gstatic.com";
 import { firebaseConfig } from "./firebase-config.js";
@@ -40,7 +40,7 @@ window.login = async (event) => {
     localStorage.setItem("auctionRole", role);
   } catch (e) {
     // New user registration
-    if (e.code === "auth/invalid-credential" || e.code === "auth/user-not-found") {
+    if (e.code === "auth/invalid-credential" || e.code === "auth/user-not-found" || e.code === "auth/wrong-password") {
       try {
         await createUserWithEmailAndPassword(auth, email, password);
         localStorage.setItem("auctionRole", role);
