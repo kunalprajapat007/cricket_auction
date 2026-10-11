@@ -1,12 +1,14 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+import { initializeApp } from "https://gstatic.com";
+import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://gstatic.com";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://gstatic.com";
 import { firebaseConfig } from "./firebase-config.js";
 
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
 const db = getFirestore(fb);
-let unsubs = [];
+
+// Filter array bypass rule lagaya he taaki brackets delete na hon
+let unsubs = new Array(); 
 
 const \$ = (id) => document.getElementById(id);
 const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
@@ -32,7 +34,7 @@ window.login = async (event) => {
   }
 
   try {
-    // Existing user handler pipeline
+    // Firebase Anonymous Login Pipeline
     await signInAnonymously(auth);
     localStorage.setItem("auctionRole", role);
   } catch (e) {
@@ -66,7 +68,8 @@ onAuthStateChanged(auth, async (user) => {
 // PAGE NAVIGATION
 // ===============================
 window.show = (id) => {
-  ["dash", "players", "teams", "auction", "history"].forEach((x) => {
+  const tabs = new Array("dash", "players", "teams", "auction", "history");
+  tabs.forEach((x) => {
     if (\((x)) {\)(x).hidden = (x !== id);
     }
   });
@@ -82,9 +85,9 @@ async function seedDemoData() {
     await setDoc(doc(db, "players", "demo_player_3"), { name: "Jasprit Demo", role: "Bowler", basePrice: 200000, status: "PENDING", demo: true }, { merge: true });
     await setDoc(doc(db, "players", "demo_player_4"), { name: "Hardik Demo", role: "All-Rounder", basePrice: 250000, status: "PENDING", demo: true }, { merge: true });
 
-    await setDoc(doc(db, "teams", "demo_team_1"), { name: "Ahmedabad Warriors", purse: 5000000, spent: 0, squad: [], demo: true }, { merge: true });
-    await setDoc(doc(db, "teams", "demo_team_2"), { name: "Mumbai Strikers", purse: 5000000, spent: 0, squad: [], demo: true }, { merge: true });
-    await setDoc(doc(db, "teams", "demo_team_3"), { name: "Delhi Challengers", purse: 5000000, spent: 0, squad: [], demo: true }, { merge: true });
+    await setDoc(doc(db, "teams", "demo_team_1"), { name: "Ahmedabad Warriors", purse: 5000000, spent: 0, squad: new Array(), demo: true }, { merge: true });
+    await setDoc(doc(db, "teams", "demo_team_2"), { name: "Mumbai Strikers", purse: 5000000, spent: 0, squad: new Array(), demo: true }, { merge: true });
+    await setDoc(doc(db, "teams", "demo_team_3"), { name: "Delhi Challengers", purse: 5000000, spent: 0, squad: new Array(), demo: true }, { merge: true });
 
     await setDoc(doc(db, "auctions", "demo_auction_1"), { name: "Live Demo Auction", playerName: "Hardik Demo", status: "LIVE", currentBid: 250000, highestTeamName: "No bid", demo: true }, { merge: true });
   } catch (e) {
@@ -97,11 +100,11 @@ async function seedDemoData() {
 // ===============================
 function listen() {
   unsubs.forEach((fn) => fn());
-  unsubs = [];
+  unsubs = new Array();
 
   unsubs.push(
     onSnapshot(collection(db, "players"), (s) => {
-      const players = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const players = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
       if (("pc")) ("pc").textContent = players.length;
       if (\$("plist")) {
         \$("plist").innerHTML = players.map((p) => `
@@ -117,7 +120,7 @@ function listen() {
 
   unsubs.push(
     onSnapshot(collection(db, "teams"), (s) => {
-      const teams = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const teams = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
       if (("tc")) ("tc").textContent = teams.length;
       if (\$("tlist")) {
         \$("tlist").innerHTML = teams.map((t) => `
@@ -131,7 +134,7 @@ function listen() {
 
   unsubs.push(
     onSnapshot(collection(db, "auctions"), (s) => {
-      const auctions = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const auctions = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
       const live = auctions.filter((x) => x.status === "LIVE");
       if (("bc")) ("bc").textContent = live.length;
       if (\$("live")) {
@@ -154,7 +157,7 @@ function listen() {
 }
 
 // ===================================================
-// GLOBAL CLICK MICRO-ANIMATION LAYOUT INTERFACE
+// GLOBAL CLICK MICRO-ANIMATION EFFECT ENGINE
 // ===================================================
 window.addEventListener('click', function (event) {
   const rippleEffect = document.createElement('div');
