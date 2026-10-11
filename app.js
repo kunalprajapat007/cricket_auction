@@ -1,6 +1,6 @@
-import { initializeApp } from "https://gstatic.com";
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://gstatic.com";
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp } from "https://gstatic.com";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const fb = initializeApp(firebaseConfig);
