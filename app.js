@@ -23,6 +23,7 @@ import {
   addDoc,
   onSnapshot,
   doc,
+  getDoc,
   setDoc,
   runTransaction,
   serverTimestamp
@@ -364,11 +365,11 @@ $("loginForm")?.addEventListener("submit", async event => {
         createdAt: serverTimestamp()
       });
 
-      localStorage.setItem("auctionRole", role);
       showMessage("Account created successfully.");
     } else {
+      // Login only authenticates the account.
+      // The role is loaded from Firestore in onAuthStateChanged.
       await signInWithEmailAndPassword(auth, email, password);
-      localStorage.setItem("auctionRole", role);
       showMessage("Sign in successful.");
     }
   } catch (error) {
@@ -395,10 +396,40 @@ onAuthStateChanged(auth, async user => {
     if ($("profileMenu")) $("profileMenu").hidden = true;
     if ($("settingsModal")) $("settingsModal").hidden = true;
 
+    currentRole = "viewer";
     return;
   }
 
-  currentRole = localStorage.getItem("auctionRole") || "viewer";
+  // Load role assigned to this account from Firestore.
+  try {
+    const userSnap = await getDoc(doc(db, "users", user.uid));
+
+    if (userSnap.exists()) {
+      const savedRole = String(userSnap.data().role || "viewer")
+        .trim()
+        .toLowerCase();
+
+      const roleMap = {
+        player: "player",
+        "team owner": "teamOwner",
+        teamowner: "teamOwner",
+        team_owner: "teamOwner",
+        viewer: "viewer"
+      };
+
+      currentRole = roleMap[savedRole] || "viewer";
+    } else {
+      currentRole = "viewer";
+      showMessage(
+        "No role is saved for this account. Set its role in the Firestore users collection.",
+        "error"
+      );
+    }
+  } catch (error) {
+    console.error("Could not load user role:", error);
+    currentRole = "viewer";
+    showMessage("Could not load your role. Check Firestore Rules.", "error");
+  }
 
   if ($("login")) $("login").hidden = true;
   if ($("app")) $("app").hidden = false;
@@ -408,6 +439,7 @@ onAuthStateChanged(auth, async user => {
   if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
   if ($("currentEmail")) $("currentEmail").textContent = user.email || "";
   if ($("settingsRole")) $("settingsRole").textContent = roleLabel(currentRole);
+
   if ($("welcomeTitle")) {
     $("welcomeTitle").textContent =
       `Welcome${user.displayName ? ", " + user.displayName : ""}`;
@@ -425,10 +457,6 @@ async function loadUserProfile() {
   if (!currentUser) return;
 
   try {
-    const { getDoc } = await import(
-      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
-    );
-
     const snapshot = await getDoc(doc(db, "users", currentUser.uid));
 
     if (snapshot.exists()) {
@@ -492,7 +520,6 @@ window.closeSettings = function () {
 window.logout = async function () {
   try {
     await signOut(auth);
-    localStorage.removeItem("auctionRole");
     showMessage("You have signed out.");
   } catch (error) {
     showMessage(errorText(error), "error");
@@ -585,7 +612,6 @@ function renderSettingsTab() {
         await setDoc(doc(db, "users", currentUser.uid), {
           name,
           email: currentUser.email || "",
-          role: currentRole,
           updatedAt: serverTimestamp()
         }, { merge: true });
 
@@ -802,7 +828,6 @@ function updateCounts() {
   if ($("pc")) $("pc").textContent = players.length;
   if ($("tc")) $("tc").textContent = teams.length;
 
-  // IMPORTANT: Count only live auctions, not all auction records.
   const count = liveAuctions().length;
 
   if ($("bc")) $("bc").textContent = count;
@@ -960,7 +985,6 @@ async function placeBid(auctionId, teamId, amount) {
       const auctionRef = doc(db, "auctions", auctionId);
       const teamRef = doc(db, "teams", teamId);
 
-      // All reads happen before any writes.
       const auctionSnap = await transaction.get(auctionRef);
       const teamSnap = await transaction.get(teamRef);
 
@@ -1293,329 +1317,3 @@ function renderHistory() {
       </article>
     `).join("");
 }
-if (!finished.length) {
-    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
-    return;
-  }
-
-  container.innerHTML = finished
-    .slice()
-    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
-    .map(auction => `
-      <article class="box content-card">
-        <span class="eyebrow">AUCTION HISTORY</span>
-        <h3>${safe(auction.playerName || "Player")}</h3>
-        <p><strong>Winner:</strong> ${safe(auction.teamName || "No winning team")}</p>
-        <p><strong>Final Bid:</strong> ${money(auction.currentBid)}</p>
-        <p><strong>Status:</strong> ${safe(auction.status)}</p>
-      </article>
-    `).join("");
-}
-
-// ================= NAYE CODE KI SHURUAT YAHAN SE HAI =================
-
-if (!finished.length) {
-    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
-    return;
-  }
-
-  container.innerHTML = finished
-    .slice()
-    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
-    .map(auction => `
-      <article class="box content-card">
-        <span class="eyebrow">AUCTION HISTORY</span>
-        <h3>${safe(auction.playerName || "Player")}</h3>
-        <p><strong>Winner:</strong> ${safe(auction.teamName || "No winning team")}</p>
-        <p><strong>Final Bid:</strong> ${money(auction.currentBid)}</p>
-        <p><strong>Status:</strong> ${safe(auction.status)}</p>
-      </article>
-    `).join("");
-}
-
-// ================= FIXED CODE YAHAN SE PASTE KAREIN =================
-
-window.toggleProfile = function () {
-  const menu = document.getElementById("profileMenu");
-  if (menu) menu.hidden = !menu.hidden;
-};
-
-window.openSettings = function () {
-  if (document.getElementById("profileMenu")) document.getElementById("profileMenu").hidden = true;
-
-  renderSettings();
-  if (document.getElementById("settingsModal")) document.getElementById("settingsModal").hidden = false;
-};
-
-window.closeSettings = function () {
-  if (document.getElementById("settingsModal")) document.getElementById("settingsModal").hidden = true;
-};
-
-window.logout = async function () {
-  try {
-    await signOut(auth);
-    localStorage.removeItem("auctionRole");
-    showMessage("You have signed out.");
-  } catch (error) {
-    showMessage(errorText(error), "error");
-  }
-};
-
-// ---------------- SETTINGS INTERFACE ----------------
-
-function renderSettings() {
-  const modal = document.getElementById("settingsModal");
-  if (!modal) {
-    showMessage("Settings container was not found in the HTML.", "error");
-    return;
-  }
-
-  modal.innerHTML = `
-    <div class="modal-backdrop" id="settingsBackdrop">
-      <div class="modal box" role="dialog" aria-modal="true">
-        <div class="modal-header">
-          <div>
-            <span class="eyebrow">ACCOUNT PREFERENCES</span>
-            <h2>Settings</h2>
-          </div>
-          <button type="button" class="icon-btn" id="settingsClose">✕</button>
-        </div>
-
-        <div class="settings-tabs">
-          <button type="button" data-settings-tab="profile">Profile</button>
-          <button type="button" data-settings-tab="email">Change Email</button>
-          <button type="button" data-settings-tab="password">Change Password</button>
-          <button type="button" data-settings-tab="appearance">Appearance</button>
-        </div>
-
-        <div class="settings-content" id="settingsContent"></div>
-      </div>
-    </div>
-  `;
-
-  document.getElementById("settingsClose").addEventListener("click", window.closeSettings);
-
-  document.getElementById("settingsBackdrop").addEventListener("click", event => {
-    if (event.target.id === "settingsBackdrop") window.closeSettings();
-  });
-
-  modal.querySelectorAll("[data-settings-tab]").forEach(button => {
-    button.addEventListener("click", () => {
-      settingsTab = button.dataset.settingsTab;
-      renderSettingsTab();
-    });
-  });
-
-  renderSettingsTab();
-}
-
-function renderSettingsTab() {
-  const content = document.getElementById("settingsContent");
-  if (!content) return;
-
-  if (settingsTab === "profile") {
-    content.innerHTML = `
-      <div class="setting-panel">
-        <h3>Profile Details</h3>
-        <p><strong>Email:</strong> ${safe(currentUser?.email || "")}</p>
-        <p><strong>Role:</strong> ${safe(roleLabel(currentRole))}</p>
-
-        <form id="nameForm">
-          <label for="displayNameInput">Full Name</label>
-          <input id="displayNameInput" maxlength="80"
-            value="${safe(currentUser?.displayName || "")}"
-            placeholder="Enter your full name" required>
-
-          <button type="submit" class="primary-btn full-btn">Save Name</button>
-        </form>
-      </div>
-    `;
-
-    document.getElementById("nameForm").addEventListener("submit", async event => {
-      event.preventDefault();
-
-      const name = document.getElementById("displayNameInput").value.trim();
-
-      if (!name) {
-        showMessage("Please enter your name.", "error");
-        return;
-      }
-
-      try {
-        await updateProfile(currentUser, { displayName: name });
-
-        await setDoc(doc(db, "users", currentUser.uid), {
-          name,
-          email: currentUser.email || "",
-          role: currentRole,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-
-        if (document.getElementById("profileName")) document.getElementById("profileName").textContent = name;
-        if (document.getElementById("welcomeTitle")) document.getElementById("welcomeTitle").textContent = `Welcome, ${name}`;
-
-        showMessage("Your name has been updated.");
-        renderSettingsTab();
-      } catch (error) {
-        showMessage(errorText(error), "error");
-      }
-    });
-
-    return;
-  }
-
-  if (settingsTab === "email") {
-    content.innerHTML = `
-      <div class="setting-panel">
-        <h3>Change Email Address</h3>
-        <p>Current email: ${safe(currentUser?.email || "")}</p>
-
-        <form id="changeEmailForm">
-          <label for="settingsNewEmail">New Email Address</label>
-          <input id="settingsNewEmail" type="email"
-            placeholder="Enter new email address" required>
-
-          <label for="emailPassword">Current Password</label>
-          <input id="emailPassword" type="password"
-            placeholder="Enter current password" required>
-
-          <button class="primary-btn full-btn" type="submit">
-            Send Verification Email
-          </button>
-        </form>
-      </div>
-    `;
-
-    document.getElementById("changeEmailForm").addEventListener("submit", async event => {
-      event.preventDefault();
-
-      const newEmail = document.getElementById("settingsNewEmail").value.trim();
-      const password = document.getElementById("emailPassword").value;
-
-      if (!currentUser?.email || newEmail === currentUser.email) {
-        showMessage("Enter a different email address.", "error");
-        return;
-      }
-
-      try {
-        const credential = EmailAuthProvider.credential(
-          currentUser.email,
-          password
-        );
-
-        await reauthenticateWithCredential(currentUser, credential);
-        await verifyBeforeUpdateEmail(currentUser, newEmail);
-
-        showMessage("Verification email sent. Open the link in your new inbox.");
-        document.getElementById("changeEmailForm").reset();
-      } catch (error) {
-        showMessage(errorText(error), "error");
-      }
-    });
-
-    return;
-  }
-
-  if (settingsTab === "password") {
-    content.innerHTML = `
-      <div class="setting-panel">
-        <h3>Change Password</h3>
-
-        <form id="changePasswordForm">
-          <label for="oldPassword">Current Password</label>
-          <input id="oldPassword" type="password"
-            placeholder="Enter current password" required>
-
-          <label for="newPassword">New Password</label>
-          <input id="newPassword" type="password"
-            minlength="6" placeholder="At least 6 characters" required>
-
-          <label for="confirmPassword">Confirm New Password</label>
-          <input id="confirmPassword" type="password"
-            minlength="6" placeholder="Re-enter new password" required>
-
-          <button class="primary-btn full-btn" type="submit">
-            Update Password
-          </button>
-        </form>
-      </div>
-    `;
-
-    document.getElementById("changePasswordForm").addEventListener("submit", async event => {
-      event.preventDefault();
-
-      const oldPassword = document.getElementById("oldPassword").value;
-      const newPassword = document.getElementById("newPassword").value;
-      const confirmPassword = document.getElementById("confirmPassword").value;
-
-      if (newPassword.length < 6) {
-        showMessage("New password must contain at least 6 characters.", "error");
-        return;
-      }
-
-      if (newPassword !== confirmPassword) {
-        showMessage("The new passwords do not match.", "error");
-        return;
-      }
-
-      try {
-        const credential = EmailAuthProvider.credential(
-          currentUser.email,
-          oldPassword
-        );
-
-        await reauthenticateWithCredential(currentUser, credential);
-        await updatePassword(currentUser, newPassword);
-
-        showMessage("Password updated successfully.");
-        document.getElementById("changePasswordForm").reset();
-      } catch (error) {
-        showMessage(errorText(error), "error");
-      }
-    });
-
-    return;
-  }
-
-  if (settingsTab === "appearance") {
-    content.innerHTML = `
-      <div class="setting-panel">
-        <h3>Appearance</h3>
-        <label for="themeChoice">Choose Theme</label>
-
-        <select id="themeChoice">
-          <option value="dark">Dark Theme</option>
-          <option value="light">Light Theme</option>
-        </select>
-
-        <button class="primary-btn full-btn" id="saveTheme" type="button">
-          Apply Theme
-        </button>
-      </div>
-    `;
-
-    document.getElementById("themeChoice").value = localStorage.getItem("auctionTheme") || "dark";
-
-    document.getElementById("saveTheme").addEventListener("click", () => {
-      changeTheme(document.getElementById("themeChoice").value);
-    });
-  }
-}
-
-// ---------------- NAVIGATION ----------------
-
-window.show = function (sectionId) {
-  const sections = ["dash", "players", "teams", "auction", "history"];
-
-  if (!sections.includes(sectionId)) return;
-
-  sections.forEach(id => {
-    const section = document.getElementById(id);
-    if (section) section.hidden = (id !== sectionId);
-  });
-};
-
-
-
- 
- 
