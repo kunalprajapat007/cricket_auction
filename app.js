@@ -12,7 +12,9 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   verifyBeforeUpdateEmail,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  updateProfile,
+  updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import {
@@ -21,14 +23,14 @@ import {
   addDoc,
   onSnapshot,
   doc,
-  updateDoc,
-  serverTimestamp,
-  runTransaction
+  setDoc,
+  runTransaction,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 
 let currentUser = null;
@@ -36,15 +38,15 @@ let currentRole = "viewer";
 let players = [];
 let teams = [];
 let auctions = [];
-let unsubscribePlayers = null;
-let unsubscribeTeams = null;
-let unsubscribeAuctions = null;
-let isRegisterMode = false;
-let activeModal = null;
+let stopPlayers = null;
+let stopTeams = null;
+let stopAuctions = null;
+let registerMode = false;
+let settingsTab = "profile";
 
-// ---------------- MESSAGE ----------------
+const isViewer = () => currentRole === "viewer";
 
-function message(text, type = "success") {
+function showMessage(text, type = "success") {
   const box = $("message");
 
   if (!box) {
@@ -56,233 +58,274 @@ function message(text, type = "success") {
   box.className = `message ${type}`;
   box.hidden = false;
 
-  clearTimeout(message.timer);
-
-  message.timer = setTimeout(() => {
+  clearTimeout(showMessage.timer);
+  showMessage.timer = setTimeout(() => {
     box.hidden = true;
-  }, 5000);
+  }, 4500);
 }
 
-function friendlyError(error) {
+function errorText(error) {
   const errors = {
-    "auth/invalid-email": "Email address sahi nahi hai.",
-    "auth/invalid-credential": "Email ya password galat hai.",
-    "auth/user-not-found": "Account nahi mila. Create an account karein.",
-    "auth/wrong-password": "Password galat hai.",
-    "auth/email-already-in-use": "Ye email pehle se registered hai.",
-    "auth/weak-password": "Password kam se kam 6 characters ka hona chahiye.",
-    "auth/too-many-requests": "Bahut attempts hue. Thodi der baad try karein.",
-    "auth/network-request-failed": "Internet connection check karein.",
-    "auth/requires-recent-login": "Dobara login karke try karein.",
-    "permission-denied": "Firebase Firestore Rules permission deny kar rahe hain.",
-    "firestore/permission-denied": "Firebase Firestore Rules check karein."
+    "auth/invalid-email": "Please enter a valid email address.",
+    "auth/invalid-credential": "Incorrect email or password.",
+    "auth/user-not-found": "Account not found. Please create an account.",
+    "auth/wrong-password": "Your current password is incorrect.",
+    "auth/email-already-in-use": "This email is already registered.",
+    "auth/weak-password": "Password must contain at least 6 characters.",
+    "auth/too-many-requests": "Too many attempts. Please try again later.",
+    "auth/network-request-failed": "Network error. Please check your connection.",
+    "auth/requires-recent-login": "Please sign in again to complete this action.",
+    "auth/invalid-action-code": "This verification link is invalid or expired.",
+    "permission-denied": "Access denied. Please check your Firebase Firestore Rules.",
+    "firestore/permission-denied": "Access denied. Please check your Firebase Firestore Rules."
   };
 
-  return errors[error?.code] ||
-    error?.message ||
-    "Kuch galat hua. Dobara try karein.";
+  return errors[error?.code] || error?.message || "Something went wrong. Please try again.";
 }
 
-function safeText(value) {
-  const element = document.createElement("span");
-  element.textContent = String(value ?? "");
-  return element.innerHTML;
+function safe(value) {
+  const span = document.createElement("span");
+  span.textContent = String(value ?? "");
+  return span.innerHTML;
 }
 
 function money(value) {
   return "₹" + Number(value || 0).toLocaleString("en-IN");
 }
 
-function emptyState(container, text) {
-  if (!container) return;
-
-  container.innerHTML =
-    `<div class="box empty-state">${safeText(text)}</div>`;
+function roleLabel(role) {
+  return {
+    player: "Player",
+    teamOwner: "Team Owner",
+    viewer: "Viewer"
+  }[role] || "Viewer";
 }
 
-// ---------------- MODAL ----------------
-
-function closeActionModal() {
-  if (activeModal) activeModal.remove();
-  activeModal = null;
+function liveAuctions() {
+  return auctions.filter(item => item.status === "live");
 }
 
-function makeModal(title, description = "") {
-  closeActionModal();
+function stopDataListeners() {
+  stopPlayers?.();
+  stopTeams?.();
+  stopAuctions?.();
 
-  const backdrop = document.createElement("div");
-  backdrop.className = "modal-backdrop";
-  backdrop.id = "actionModal";
+  stopPlayers = null;
+  stopTeams = null;
+  stopAuctions = null;
+}
 
-  backdrop.innerHTML = `
-    <div class="modal box" role="dialog" aria-modal="true">
-      <div class="modal-header">
-        <div>
-          <span class="eyebrow">SMART CRICKET AUCTION</span>
-          <h2>${safeText(title)}</h2>
-        </div>
-        <button type="button" class="icon-btn"
-          data-close-modal aria-label="Close">✕</button>
-      </div>
+function requireEditor() {
+  if (!currentUser) {
+    showMessage("Please sign in first.", "error");
+    return false;
+  }
 
-      ${description
-        ? `<p class="muted-note">${safeText(description)}</p>`
-        : ""}
+  if (isViewer()) {
+    showMessage("Viewer access is read-only. You cannot perform this action.", "error");
+    return false;
+  }
 
-      <div id="actionModalBody"></div>
-    </div>
-  `;
+  return true;
+}
 
-  document.body.appendChild(backdrop);
-  activeModal = backdrop;
+// ---------------- THEME ----------------
 
-  backdrop.addEventListener("click", event => {
-    if (
-      event.target === backdrop ||
-      event.target.closest("[data-close-modal]")
-    ) {
-      closeActionModal();
+function addThemeStyles() {
+  if ($("auctionThemeStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "auctionThemeStyles";
+
+  style.textContent = `
+    body.theme-light {
+      background: #f4f6fb !important;
+      color: #182033 !important;
+      color-scheme: light;
     }
-  });
 
-  return $("actionModalBody");
-}
-
-function field(
-  label,
-  id,
-  type = "text",
-  placeholder = "",
-  required = true
-) {
-  return `
-    <label for="${id}">${safeText(label)}</label>
-    <input
-      id="${id}"
-      type="${type}"
-      placeholder="${safeText(placeholder)}"
-      ${required ? "required" : ""}
-      ${type === "number" ? 'min="0" step="any"' : ""}
-    >
-  `;
-}
-
-function selectField(label, id, options) {
-  return `
-    <label for="${id}">${safeText(label)}</label>
-    <select id="${id}" required>
-      ${options.map(option => `
-        <option value="${safeText(option.value)}">
-          ${safeText(option.label)}
-        </option>
-      `).join("")}
-    </select>
-  `;
-}
-
-function modalForm(title, fieldsHtml, onSubmit, description = "") {
-  const body = makeModal(title, description);
-
-  body.innerHTML = `
-    <form id="actionForm">
-      ${fieldsHtml}
-      <button class="primary-btn full-btn" type="submit">Save</button>
-    </form>
-  `;
-
-  $("actionForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const button = event.currentTarget.querySelector(
-      'button[type="submit"]'
-    );
-
-    button.disabled = true;
-    button.textContent = "Please wait...";
-
-    try {
-      await onSubmit();
-      closeActionModal();
-    } catch (error) {
-      message(friendlyError(error), "error");
-    } finally {
-      if (button.isConnected) {
-        button.disabled = false;
-        button.textContent = "Save";
-      }
+    body.theme-light .box,
+    body.theme-light .modal,
+    body.theme-light .card,
+    body.theme-light .content-card,
+    body.theme-light .auction-card {
+      background: #ffffff !important;
+      color: #182033 !important;
+      border-color: #dce2ed !important;
     }
-  });
+
+    body.theme-light input,
+    body.theme-light select,
+    body.theme-light textarea {
+      background: #ffffff !important;
+      color: #182033 !important;
+      border-color: #ccd4e2 !important;
+    }
+
+    body.theme-light .muted-note,
+    body.theme-light .eyebrow {
+      color: #58647a;
+    }
+
+    body.theme-light .modal-backdrop {
+      background: rgba(15, 23, 42, .48);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .settings-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+
+    .settings-tabs button {
+      cursor: pointer;
+      padding: 9px 12px;
+      border-radius: 8px;
+    }
+
+    .settings-content label,
+    #actionForm label {
+      display: block;
+      margin: 12px 0 6px;
+    }
+
+    .settings-content input,
+    .settings-content select,
+    #actionForm input,
+    #actionForm select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 11px;
+      margin-bottom: 8px;
+    }
+
+    .settings-content button {
+      margin-top: 10px;
+    }
+
+    .settings-content .setting-panel {
+      padding: 8px 0;
+    }
+
+    .full-btn {
+      width: 100%;
+      margin-top: 14px;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      overflow-y: auto;
+      background: rgba(0,0,0,.65);
+    }
+
+    .modal {
+      width: min(100%, 480px);
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 22px;
+      border-radius: 14px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      cursor: pointer;
+    }
+
+    .viewer-note {
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+  `;
+
+  document.head.appendChild(style);
 }
 
-// ---------------- PASSWORD SHOW / HIDE ----------------
+function applyTheme(theme) {
+  const chosen = theme === "light" ? "light" : "dark";
+
+  document.body.classList.toggle("theme-light", chosen === "light");
+  document.documentElement.style.colorScheme = chosen;
+  localStorage.setItem("auctionTheme", chosen);
+
+  const selector = $("themeChoice");
+  if (selector) selector.value = chosen;
+}
+
+function changeTheme(theme) {
+  applyTheme(theme);
+  showMessage(`Theme changed to ${theme}.`);
+}
+
+addThemeStyles();
+applyTheme(localStorage.getItem("auctionTheme") || "dark");
+
+// ---------------- AUTH FORM ----------------
 
 window.togglePasswordVisibility = function () {
   const input = $("pass");
-  const button = $("eyeIcon");
+  const eye = $("eyeIcon");
 
-  if (!input || !button) return;
+  if (!input || !eye) return;
 
-  const visible = input.type === "password";
-
-  input.type = visible ? "text" : "password";
-  button.textContent = visible ? "🙈" : "👁️";
-
-  button.setAttribute(
-    "aria-label",
-    visible ? "Hide password" : "Show password"
-  );
+  input.type = input.type === "password" ? "text" : "password";
+  eye.textContent = input.type === "password" ? "👁️" : "🙈";
 };
-
-// ---------------- FORGOT PASSWORD ----------------
 
 window.handleForgotPassword = async function () {
   const email = $("email")?.value.trim();
 
   if (!email) {
-    message(
-      "Pehle email enter karein, phir Forgot Password click karein.",
-      "error"
-    );
+    showMessage("Enter your email address first.", "error");
     $("email")?.focus();
     return;
   }
 
   try {
     await sendPasswordResetEmail(auth, email);
-    message("Password reset link aapke email par bhej diya gaya hai.");
+    showMessage("Password reset instructions have been sent to your email.");
   } catch (error) {
-    message(friendlyError(error), "error");
+    showMessage(errorText(error), "error");
   }
 };
 
-// ---------------- LOGIN / REGISTER TOGGLE ----------------
-
 window.toggleAuthMode = function () {
-  isRegisterMode = !isRegisterMode;
+  registerMode = !registerMode;
 
   if ($("authTitle")) {
-    $("authTitle").textContent =
-      isRegisterMode ? "Create Account" : "Welcome back";
+    $("authTitle").textContent = registerMode ? "Create Account" : "Welcome back";
   }
 
   if ($("loginBtn")) {
-    $("loginBtn").textContent =
-      isRegisterMode ? "Register Now" : "Login / Register";
+    $("loginBtn").textContent = registerMode ? "Register Now" : "Login / Register";
   }
 
   if ($("pass")) {
-    $("pass").autocomplete =
-      isRegisterMode ? "new-password" : "current-password";
-
-    $("pass").placeholder = isRegisterMode
-      ? "Create password (6+ characters)"
-      : "Enter password (6+ characters)";
+    $("pass").autocomplete = registerMode ? "new-password" : "current-password";
+    $("pass").placeholder = registerMode ? "Create password" : "Enter password";
   }
 
   if ($("toggleText")) {
-    $("toggleText").innerHTML = isRegisterMode
-      ? 'Already have an account? <span id="authModeLink" style="color:var(--accent);cursor:pointer;text-decoration:underline;font-weight:600;">Login here</span>'
-      : 'New here? <span id="authModeLink" style="color:var(--accent);cursor:pointer;text-decoration:underline;font-weight:600;">Create an account</span>';
+    $("toggleText").innerHTML = registerMode
+      ? 'Already have an account? <span id="authModeLink" style="cursor:pointer;text-decoration:underline">Login here</span>'
+      : 'New here? <span id="authModeLink" style="cursor:pointer;text-decoration:underline">Create an account</span>';
   }
 };
 
@@ -292,107 +335,153 @@ $("toggleText")?.addEventListener("click", event => {
   }
 });
 
-// ---------------- LOGIN FORM ----------------
-
 $("loginForm")?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  const email = $("email").value.trim();
-  const password = $("pass").value;
-  const selectedRole = $("role")?.value || "viewer";
+  const email = $("email")?.value.trim();
+  const password = $("pass")?.value;
+  const role = $("role")?.value || "viewer";
   const button = $("loginBtn");
 
-  button.disabled = true;
-  button.textContent = "Please wait...";
+  if (!email || !password) {
+    showMessage("Enter your email and password.", "error");
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Please wait...";
+  }
 
   try {
-    if (isRegisterMode) {
-      await createUserWithEmailAndPassword(auth, email, password);
-      localStorage.setItem("auctionRole", selectedRole);
-      message("Account successfully created!");
+    if (registerMode) {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+
+      await setDoc(doc(db, "users", result.user.uid), {
+        email,
+        role,
+        name: "",
+        createdAt: serverTimestamp()
+      });
+
+      localStorage.setItem("auctionRole", role);
+      showMessage("Account created successfully.");
     } else {
       await signInWithEmailAndPassword(auth, email, password);
-      localStorage.setItem("auctionRole", selectedRole);
-      message("Login successful!");
+      localStorage.setItem("auctionRole", role);
+      showMessage("Sign in successful.");
     }
   } catch (error) {
-    message(friendlyError(error), "error");
+    showMessage(errorText(error), "error");
   } finally {
-    button.disabled = false;
-    button.textContent =
-      isRegisterMode ? "Register Now" : "Login / Register";
+    if (button) {
+      button.disabled = false;
+      button.textContent = registerMode ? "Register Now" : "Login / Register";
+    }
   }
 });
 
-function roleName(role) {
-  return {
-    player: "Player",
-    teamOwner: "Team Owner",
-    viewer: "Viewer"
-  }[role] || "Viewer";
-}
-
 // ---------------- AUTH STATE ----------------
 
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   currentUser = user;
 
-  if (user) {
-    currentRole = localStorage.getItem("auctionRole") || "viewer";
-
-    if ($("login")) $("login").hidden = true;
-    if ($("app")) $("app").hidden = false;
-    if ($("userTools")) $("userTools").hidden = false;
-
-    if ($("profileEmail")) {
-      $("profileEmail").textContent = user.email || "Signed-in user";
-    }
-
-    if ($("profileRole")) {
-      $("profileRole").textContent = roleName(currentRole);
-    }
-
-    if ($("currentEmail")) {
-      $("currentEmail").textContent = user.email || "No email";
-    }
-
-    if ($("settingsRole")) {
-      $("settingsRole").textContent = roleName(currentRole);
-    }
-
-    if ($("welcomeTitle")) {
-      $("welcomeTitle").textContent =
-        `Welcome, ${roleName(currentRole)}`;
-    }
-
-    listenToData();
-    window.show("dash");
-  } else {
-    stopListeners();
+  if (!user) {
+    stopDataListeners();
 
     if ($("login")) $("login").hidden = false;
     if ($("app")) $("app").hidden = true;
     if ($("userTools")) $("userTools").hidden = true;
     if ($("profileMenu")) $("profileMenu").hidden = true;
     if ($("settingsModal")) $("settingsModal").hidden = true;
+
+    return;
   }
+
+  currentRole = localStorage.getItem("auctionRole") || "viewer";
+
+  if ($("login")) $("login").hidden = true;
+  if ($("app")) $("app").hidden = false;
+  if ($("userTools")) $("userTools").hidden = false;
+
+  if ($("profileEmail")) $("profileEmail").textContent = user.email || "";
+  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
+  if ($("currentEmail")) $("currentEmail").textContent = user.email || "";
+  if ($("settingsRole")) $("settingsRole").textContent = roleLabel(currentRole);
+  if ($("welcomeTitle")) {
+    $("welcomeTitle").textContent =
+      `Welcome${user.displayName ? ", " + user.displayName : ""}`;
+  }
+
+  await loadUserProfile();
+  listenToData();
+  updateRoleInterface();
+  window.show("dash");
 });
 
-// ---------------- PROFILE / SETTINGS ----------------
+// ---------------- USER PROFILE ----------------
+
+async function loadUserProfile() {
+  if (!currentUser) return;
+
+  try {
+    const { getDoc } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+    );
+
+    const snapshot = await getDoc(doc(db, "users", currentUser.uid));
+
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+
+      if (data.name && !currentUser.displayName) {
+        await updateProfile(currentUser, { displayName: data.name });
+      }
+    }
+  } catch (error) {
+    console.warn("Profile loading:", error);
+  }
+
+  if ($("profileName")) {
+    $("profileName").textContent =
+      currentUser.displayName || currentUser.email || "User";
+  }
+
+  if ($("profileEmail")) $("profileEmail").textContent = currentUser.email || "";
+}
+
+function updateRoleInterface() {
+  document.querySelectorAll("[data-editor-only]").forEach(element => {
+    element.hidden = isViewer();
+  });
+
+  document.querySelectorAll("[data-viewer-only]").forEach(element => {
+    element.hidden = !isViewer();
+  });
+
+  const note = $("viewerNotice");
+
+  if (note) {
+    note.hidden = !isViewer();
+    note.textContent = isViewer()
+      ? "Viewer mode: You can view players, teams and auctions, but cannot make changes."
+      : "";
+  }
+
+  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
+}
+
+// ---------------- PROFILE MENU ----------------
 
 window.toggleProfile = function () {
-  if ($("profileMenu")) {
-    $("profileMenu").hidden = !$("profileMenu").hidden;
-  }
+  const menu = $("profileMenu");
+  if (menu) menu.hidden = !menu.hidden;
 };
 
 window.openSettings = function () {
   if ($("profileMenu")) $("profileMenu").hidden = true;
 
-  if ($("currentEmail")) {
-    $("currentEmail").textContent = currentUser?.email || "No email";
-  }
-
+  renderSettings();
   if ($("settingsModal")) $("settingsModal").hidden = false;
 };
 
@@ -402,54 +491,256 @@ window.closeSettings = function () {
 
 window.logout = async function () {
   try {
-    closeActionModal();
     await signOut(auth);
     localStorage.removeItem("auctionRole");
-    message("You have logged out.");
+    showMessage("You have signed out.");
   } catch (error) {
-    message(friendlyError(error), "error");
+    showMessage(errorText(error), "error");
   }
 };
 
-// ---------------- CHANGE EMAIL ----------------
+// ---------------- SETTINGS INTERFACE ----------------
 
-$("emailForm")?.addEventListener("submit", async event => {
-  event.preventDefault();
-
-  if (!currentUser?.email) {
-    message("Please login first.", "error");
+function renderSettings() {
+  const modal = $("settingsModal");
+  if (!modal) {
+    showMessage("Settings container was not found in the HTML.", "error");
     return;
   }
 
-  const newEmail = $("newEmail").value.trim();
-  const password = $("currentPassword").value;
+  modal.innerHTML = `
+    <div class="modal-backdrop" id="settingsBackdrop">
+      <div class="modal box" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">ACCOUNT PREFERENCES</span>
+            <h2>Settings</h2>
+          </div>
+          <button type="button" class="icon-btn" id="settingsClose">✕</button>
+        </div>
 
-  if (newEmail === currentUser.email) {
-    message("Ye aapka current email hi hai.", "error");
+        <div class="settings-tabs">
+          <button type="button" data-settings-tab="profile">Profile</button>
+          <button type="button" data-settings-tab="email">Change Email</button>
+          <button type="button" data-settings-tab="password">Change Password</button>
+          <button type="button" data-settings-tab="appearance">Appearance</button>
+        </div>
+
+        <div class="settings-content" id="settingsContent"></div>
+      </div>
+    </div>
+  `;
+
+  $("settingsClose").addEventListener("click", window.closeSettings);
+
+  $("settingsBackdrop").addEventListener("click", event => {
+    if (event.target.id === "settingsBackdrop") window.closeSettings();
+  });
+
+  modal.querySelectorAll("[data-settings-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      settingsTab = button.dataset.settingsTab;
+      renderSettingsTab();
+    });
+  });
+
+  renderSettingsTab();
+}
+
+function renderSettingsTab() {
+  const content = $("settingsContent");
+  if (!content) return;
+
+  if (settingsTab === "profile") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Profile Details</h3>
+        <p><strong>Email:</strong> ${safe(currentUser?.email || "")}</p>
+        <p><strong>Role:</strong> ${safe(roleLabel(currentRole))}</p>
+
+        <form id="nameForm">
+          <label for="displayNameInput">Full Name</label>
+          <input id="displayNameInput" maxlength="80"
+            value="${safe(currentUser?.displayName || "")}"
+            placeholder="Enter your full name" required>
+
+          <button type="submit" class="primary-btn full-btn">Save Name</button>
+        </form>
+      </div>
+    `;
+
+    $("nameForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const name = $("displayNameInput").value.trim();
+
+      if (!name) {
+        showMessage("Please enter your name.", "error");
+        return;
+      }
+
+      try {
+        await updateProfile(currentUser, { displayName: name });
+
+        await setDoc(doc(db, "users", currentUser.uid), {
+          name,
+          email: currentUser.email || "",
+          role: currentRole,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        if ($("profileName")) $("profileName").textContent = name;
+        if ($("welcomeTitle")) $("welcomeTitle").textContent = `Welcome, ${name}`;
+
+        showMessage("Your name has been updated.");
+        renderSettingsTab();
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
     return;
   }
 
-  try {
-    const credential = EmailAuthProvider.credential(
-      currentUser.email,
-      password
-    );
+  if (settingsTab === "email") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Change Email Address</h3>
+        <p>Current email: ${safe(currentUser?.email || "")}</p>
 
-    await reauthenticateWithCredential(currentUser, credential);
-    await verifyBeforeUpdateEmail(currentUser, newEmail);
+        <form id="changeEmailForm">
+          <label for="settingsNewEmail">New Email Address</label>
+          <input id="settingsNewEmail" type="email"
+            placeholder="Enter new email address" required>
 
-    message(
-      "Verification email bhej diya gaya hai. Inbox mein link open karein."
-    );
+          <label for="emailPassword">Current Password</label>
+          <input id="emailPassword" type="password"
+            placeholder="Enter current password" required>
 
-    $("emailForm").reset();
-    $("settingsModal").hidden = true;
-  } catch (error) {
-    message(friendlyError(error), "error");
+          <button class="primary-btn full-btn" type="submit">
+            Send Verification Email
+          </button>
+        </form>
+      </div>
+    `;
+
+    $("changeEmailForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const newEmail = $("settingsNewEmail").value.trim();
+      const password = $("emailPassword").value;
+
+      if (!currentUser?.email || newEmail === currentUser.email) {
+        showMessage("Enter a different email address.", "error");
+        return;
+      }
+
+      try {
+        const credential = EmailAuthProvider.credential(
+          currentUser.email,
+          password
+        );
+
+        await reauthenticateWithCredential(currentUser, credential);
+        await verifyBeforeUpdateEmail(currentUser, newEmail);
+
+        showMessage("Verification email sent. Open the link in your new inbox.");
+        $("changeEmailForm").reset();
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
+    return;
   }
-});
 
-// ---------------- WEBSITE NAVIGATION ----------------
+  if (settingsTab === "password") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Change Password</h3>
+
+        <form id="changePasswordForm">
+          <label for="oldPassword">Current Password</label>
+          <input id="oldPassword" type="password"
+            placeholder="Enter current password" required>
+
+          <label for="newPassword">New Password</label>
+          <input id="newPassword" type="password"
+            minlength="6" placeholder="At least 6 characters" required>
+
+          <label for="confirmPassword">Confirm New Password</label>
+          <input id="confirmPassword" type="password"
+            minlength="6" placeholder="Re-enter new password" required>
+
+          <button class="primary-btn full-btn" type="submit">
+            Update Password
+          </button>
+        </form>
+      </div>
+    `;
+
+    $("changePasswordForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const oldPassword = $("oldPassword").value;
+      const newPassword = $("newPassword").value;
+      const confirmPassword = $("confirmPassword").value;
+
+      if (newPassword.length < 6) {
+        showMessage("New password must contain at least 6 characters.", "error");
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showMessage("The new passwords do not match.", "error");
+        return;
+      }
+
+      try {
+        const credential = EmailAuthProvider.credential(
+          currentUser.email,
+          oldPassword
+        );
+
+        await reauthenticateWithCredential(currentUser, credential);
+        await updatePassword(currentUser, newPassword);
+
+        showMessage("Password updated successfully.");
+        $("changePasswordForm").reset();
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
+    return;
+  }
+
+  if (settingsTab === "appearance") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Appearance</h3>
+        <label for="themeChoice">Choose Theme</label>
+
+        <select id="themeChoice">
+          <option value="dark">Dark Theme</option>
+          <option value="light">Light Theme</option>
+        </select>
+
+        <button class="primary-btn full-btn" id="saveTheme" type="button">
+          Apply Theme
+        </button>
+      </div>
+    `;
+
+    $("themeChoice").value = localStorage.getItem("auctionTheme") || "dark";
+
+    $("saveTheme").addEventListener("click", () => {
+      changeTheme($("themeChoice").value);
+    });
+  }
+}
+
+// ---------------- NAVIGATION ----------------
 
 window.show = function (sectionId) {
   const sections = ["dash", "players", "teams", "auction", "history"];
@@ -462,10 +753,7 @@ window.show = function (sectionId) {
   });
 
   document.querySelectorAll(".nav-btn").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.section === sectionId
-    );
+    button.classList.toggle("active", button.dataset.section === sectionId);
   });
 
   if ($("profileMenu")) $("profileMenu").hidden = true;
@@ -473,357 +761,281 @@ window.show = function (sectionId) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-// ---------------- FIRESTORE LISTENERS ----------------
-
-function stopListeners() {
-  unsubscribePlayers?.();
-  unsubscribeTeams?.();
-  unsubscribeAuctions?.();
-
-  unsubscribePlayers = null;
-  unsubscribeTeams = null;
-  unsubscribeAuctions = null;
-}
+// ---------------- LIVE DATA ----------------
 
 function listenToData() {
-  stopListeners();
+  stopDataListeners();
 
-  unsubscribePlayers = onSnapshot(
+  stopPlayers = onSnapshot(
     collection(db, "players"),
     snapshot => {
-      players = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
+      players = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderPlayers();
       updateCounts();
     },
-    error => message(friendlyError(error), "error")
+    error => showMessage(errorText(error), "error")
   );
 
-  unsubscribeTeams = onSnapshot(
+  stopTeams = onSnapshot(
     collection(db, "teams"),
     snapshot => {
-      teams = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
+      teams = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderTeams();
       updateCounts();
     },
-    error => message(friendlyError(error), "error")
+    error => showMessage(errorText(error), "error")
   );
 
-  unsubscribeAuctions = onSnapshot(
+  stopAuctions = onSnapshot(
     collection(db, "auctions"),
     snapshot => {
-      auctions = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
-      renderAuction();
+      auctions = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+      renderAuctions();
       renderHistory();
       updateCounts();
     },
-    error => message(friendlyError(error), "error")
+    error => showMessage(errorText(error), "error")
   );
 }
 
 function updateCounts() {
   if ($("pc")) $("pc").textContent = players.length;
   if ($("tc")) $("tc").textContent = teams.length;
-  if ($("bc")) $("bc").textContent = auctions.length;
+
+  // IMPORTANT: Count only live auctions, not all auction records.
+  const count = liveAuctions().length;
+
+  if ($("bc")) $("bc").textContent = count;
+  if ($("liveAuctionCount")) $("liveAuctionCount").textContent = count;
+  if ($("auctionCount")) $("auctionCount").textContent = count;
 }
 
-// ---------------- PLAYERS ----------------
+// ---------------- PLAYER LIST ----------------
 
 function renderPlayers() {
   const container = $("plist");
   if (!container) return;
 
   if (!players.length) {
-    emptyState(
-      container,
-      "Abhi koi player registered nahi hai. Register Player se shuru karein."
-    );
+    container.innerHTML = `<div class="box empty-state">No players have been registered yet.</div>`;
     return;
   }
 
   container.innerHTML = players.map(player => `
     <article class="box content-card">
       <span class="eyebrow">PLAYER</span>
-      <h3>${safeText(player.name || "Unnamed Player")}</h3>
-      <p>${safeText(player.role || "Player")}</p>
+      <h3>${safe(player.name || "Unnamed Player")}</h3>
+      <p>${safe(player.role || "Player")}</p>
       <p><strong>Base Price:</strong> ${money(player.basePrice)}</p>
-      <p><strong>Status:</strong> ${safeText(player.status || "Available")}</p>
+      <p><strong>Status:</strong> ${safe(player.status || "Available")}</p>
     </article>
   `).join("");
 }
 
-// ---------------- TEAMS ----------------
+// ---------------- TEAM LIST ----------------
 
 function renderTeams() {
   const container = $("tlist");
   if (!container) return;
 
   if (!teams.length) {
-    emptyState(
-      container,
-      "Abhi koi team nahi hai. Create Team se team banayein."
-    );
+    container.innerHTML = `<div class="box empty-state">No teams have been created yet.</div>`;
     return;
   }
 
   container.innerHTML = teams.map(team => `
     <article class="box content-card">
-      <span class="eyebrow">CRICKET TEAM</span>
-      <h3>${safeText(team.name || "Unnamed Team")}</h3>
-      <p><strong>Owner:</strong> ${safeText(team.owner || "Not specified")}</p>
+      <span class="eyebrow">TEAM</span>
+      <h3>${safe(team.name || "Unnamed Team")}</h3>
+      <p><strong>Owner:</strong> ${safe(team.owner || "Not specified")}</p>
       <p><strong>Budget:</strong> ${money(team.budget)}</p>
       <p><strong>Remaining:</strong> ${money(team.remainingBudget ?? team.budget)}</p>
     </article>
   `).join("");
 }
 
-// ---------------- LIVE AUCTION ----------------
+// ---------------- LIVE AUCTIONS + BIDDING ----------------
 
-function renderAuction() {
+function renderAuctions() {
   const container = $("live");
   if (!container) return;
 
-  const liveAuctions = auctions.filter(
-    auction => auction.status === "live"
-  );
+  const active = liveAuctions();
 
-  if (!liveAuctions.length) {
-    emptyState(
-      container,
-      "Abhi koi live auction nahi hai. Start Auction par click karein."
-    );
+  if (!active.length) {
+    container.innerHTML = `<div class="box empty-state">There are currently no live auctions.</div>`;
     return;
   }
 
-  container.innerHTML = liveAuctions.map(auction => {
-    const availableTeams = teams.map(team => `
-      <option value="${safeText(team.id)}">
-        ${safeText(team.name)}
-      </option>
-    `).join("");
+  container.innerHTML = active.map(auction => `
+    <article class="box auction-card">
+      <span class="eyebrow">LIVE AUCTION</span>
+      <h3>${safe(auction.playerName || "Player")}</h3>
 
-    return `
-      <article class="box auction-card">
-        <span class="eyebrow">🔴 LIVE AUCTION</span>
-        <h3>${safeText(auction.playerName || "Player")}</h3>
-        <p><strong>Current bid:</strong> ${money(auction.currentBid)}</p>
-        <p><strong>Highest team:</strong> ${safeText(auction.teamName || "No bids yet")}</p>
+      <p><strong>Current Bid:</strong> ${money(auction.currentBid)}</p>
+      <p><strong>Highest Bidder:</strong> ${safe(auction.teamName || "No bids yet")}</p>
 
-        ${teams.length ? `
-          <form class="bid-form" data-auction-id="${safeText(auction.id)}">
-            <label>Choose team</label>
-            <select name="teamId" required>${availableTeams}</select>
+      ${!isViewer() ? `
+        <form class="bid-form" data-auction-id="${safe(auction.id)}">
+          <label>Select Team</label>
+          <select name="teamId" required>
+            <option value="">Choose a team</option>
+            ${teams.map(team => `
+              <option value="${safe(team.id)}">
+                ${safe(team.name)} — Remaining ${money(team.remainingBudget ?? team.budget)}
+              </option>
+            `).join("")}
+          </select>
 
-            <label>Bid amount (₹)</label>
-            <input
-              name="bidAmount"
-              type="number"
-              min="${Number(auction.currentBid || 0) + 1}"
-              step="1"
-              required
-            >
+          <label>Bid Amount (₹)</label>
+          <input
+            name="bidAmount"
+            type="number"
+            min="${Number(auction.currentBid || 0) + 1}"
+            step="1"
+            placeholder="Enter a higher bid"
+            required
+          >
 
-            <button class="primary-btn" type="submit">Place Bid</button>
-            <button class="secondary-btn" type="button"
-              data-sold-id="${safeText(auction.id)}">
-              Close Auction
-            </button>
-          </form>
-        ` : `<p>Create a team first to place bids.</p>`}
-      </article>
-    `;
-  }).join("");
+          <button type="submit" class="primary-btn">Place Bid</button>
+          <button type="button" class="secondary-btn"
+            data-close-auction="${safe(auction.id)}">Close Auction</button>
+        </form>
+      ` : `
+        <p class="viewer-note">View-only mode. Bidding is disabled.</p>
+      `}
+    </article>
+  `).join("");
 
   container.querySelectorAll(".bid-form").forEach(form => {
     form.addEventListener("submit", async event => {
       event.preventDefault();
 
+      if (!requireEditor()) return;
+
       const data = new FormData(form);
+      const teamId = String(data.get("teamId") || "");
+      const amount = Number(data.get("bidAmount"));
 
-      await placeBid(
-        form.dataset.auctionId,
-        String(data.get("teamId")),
-        Number(data.get("bidAmount"))
+      if (!teamId || !Number.isFinite(amount)) {
+        showMessage("Select a team and enter a valid bid.", "error");
+        return;
+      }
+
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      button.textContent = "Submitting...";
+
+      try {
+        await placeBid(form.dataset.auctionId, teamId, amount);
+      } finally {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.textContent = "Place Bid";
+        }
+      }
+    });
+  });
+
+  container.querySelectorAll("[data-close-auction]").forEach(button => {
+    button.addEventListener("click", async () => {
+      if (!requireEditor()) return;
+
+      const confirmed = window.confirm(
+        "Are you sure you want to close this auction?"
       );
-    });
-  });
 
-  container.querySelectorAll("[data-sold-id]").forEach(button => {
-    button.addEventListener("click", () => {
-      closeAuction(button.dataset.soldId);
+      if (confirmed) {
+        await closeAuction(button.dataset.closeAuction);
+      }
     });
   });
 }
 
-// ---------------- AUCTION HISTORY ----------------
+async function placeBid(auctionId, teamId, amount) {
+  if (!requireEditor()) return;
 
-function renderHistory() {
-  const container = $("hist");
-  if (!container) return;
+  try {
+    await runTransaction(db, async transaction => {
+      const auctionRef = doc(db, "auctions", auctionId);
+      const teamRef = doc(db, "teams", teamId);
 
-  const completed = auctions.filter(
-    auction => auction.status !== "live"
-  );
+      // All reads happen before any writes.
+      const auctionSnap = await transaction.get(auctionRef);
+      const teamSnap = await transaction.get(teamRef);
 
-  if (!completed.length) {
-    emptyState(container, "Abhi auction history nahi hai.");
-    return;
+      if (!auctionSnap.exists() || !teamSnap.exists()) {
+        throw new Error("Auction or team not found.");
+      }
+
+      const auction = auctionSnap.data();
+      const team = teamSnap.data();
+
+      if (auction.status !== "live") {
+        throw new Error("This auction is no longer live.");
+      }
+
+      if (amount <= Number(auction.currentBid || 0)) {
+        throw new Error("Your bid must be higher than the current bid.");
+      }
+
+      const remaining = Number(
+        team.remainingBudget ?? team.budget ?? 0
+      );
+
+      if (amount > remaining) {
+        throw new Error("The selected team does not have enough remaining budget.");
+      }
+
+      transaction.update(auctionRef, {
+        currentBid: amount,
+        teamId,
+        teamName: team.name || "Team",
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    showMessage("Bid placed successfully.");
+  } catch (error) {
+    showMessage(errorText(error), "error");
   }
-
-  container.innerHTML = completed
-    .slice()
-    .sort((a, b) => {
-      const timeA = a.createdAt?.seconds || 0;
-      const timeB = b.createdAt?.seconds || 0;
-      return timeB - timeA;
-    })
-    .map(auction => `
-      <article class="box content-card">
-        <span class="eyebrow">AUCTION RECORD</span>
-        <h3>${safeText(auction.playerName || "Player")}</h3>
-        <p><strong>Winner:</strong> ${safeText(auction.teamName || "No winning team")}</p>
-        <p><strong>Final bid:</strong> ${money(auction.currentBid)}</p>
-        <p><strong>Status:</strong> ${safeText(auction.status || "Completed")}</p>
-      </article>
-    `).join("");
 }
-
-// ---------------- ADD PLAYER ----------------
-
-window.addPlayer = function () {
-  if (!currentUser) {
-    message("Please login first.", "error");
-    return;
-  }
-
-  modalForm(
-    "Register Player",
-    `
-      ${field("Player name", "playerName", "text", "Enter player name")}
-
-      ${selectField("Playing role", "playerRole", [
-        { value: "Batsman", label: "Batsman" },
-        { value: "Bowler", label: "Bowler" },
-        { value: "All-rounder", label: "All-rounder" },
-        { value: "Wicketkeeper", label: "Wicketkeeper" }
-      ])}
-
-      ${field("Base price (₹)", "basePrice", "number", "e.g. 100000")}
-    `,
-    async () => {
-      const name = $("playerName").value.trim();
-      const role = $("playerRole").value;
-      const basePrice = Number($("basePrice").value);
-
-      if (!name || !Number.isFinite(basePrice) || basePrice < 0) {
-        throw new Error("Player name aur valid base price enter karein.");
-      }
-
-      await addDoc(collection(db, "players"), {
-        name,
-        role,
-        basePrice,
-        status: "Available",
-        createdBy: currentUser.uid,
-        createdAt: serverTimestamp()
-      });
-
-      message("Player successfully registered!");
-    },
-    "Player ki details enter karein."
-  );
-};
-
-// ---------------- ADD TEAM ----------------
-
-window.addTeam = function () {
-  if (!currentUser) {
-    message("Please login first.", "error");
-    return;
-  }
-
-  modalForm(
-    "Create Team",
-    `
-      ${field("Team name", "teamName", "text", "Enter team name")}
-      ${field("Team owner", "teamOwner", "text", "Owner name", false)}
-      ${field("Team budget (₹)", "teamBudget", "number", "e.g. 10000000")}
-    `,
-    async () => {
-      const name = $("teamName").value.trim();
-      const owner = $("teamOwner").value.trim() ||
-        currentUser.email || "Team Owner";
-      const budget = Number($("teamBudget").value);
-
-      if (!name || !Number.isFinite(budget) || budget <= 0) {
-        throw new Error("Team name aur budget sahi enter karein.");
-      }
-
-      await addDoc(collection(db, "teams"), {
-        name,
-        owner,
-        budget,
-        remainingBudget: budget,
-        createdBy: currentUser.uid,
-        createdAt: serverTimestamp()
-      });
-
-      message("Team successfully created!");
-    },
-    "Team name aur available budget enter karein."
-  );
-};
 
 // ---------------- START AUCTION ----------------
 
 window.startAuction = function () {
-  if (!currentUser) {
-    message("Please login first.", "error");
-    return;
-  }
+  if (!requireEditor()) return;
 
-  const availablePlayers = players.filter(player =>
+  const available = players.filter(player =>
     player.status !== "Sold" &&
     !auctions.some(auction =>
       auction.playerId === player.id && auction.status === "live"
     )
   );
 
-  if (!availablePlayers.length) {
-    message(
-      "Auction ke liye available player nahi hai. Pehle player register karein.",
-      "error"
-    );
+  if (!available.length) {
+    showMessage("No available players. Register a player first.", "error");
     return;
   }
 
-  modalForm(
+  openFormModal(
     "Start Auction",
-    selectField(
-      "Select player",
-      "auctionPlayerId",
-      availablePlayers.map(player => ({
-        value: player.id,
-        label: `${player.name || "Player"} — base ${money(player.basePrice)}`
-      }))
-    ),
+    `
+      <label for="auctionPlayer">Select Player</label>
+      <select id="auctionPlayer" required>
+        ${available.map(player => `
+          <option value="${safe(player.id)}">
+            ${safe(player.name)} — ${money(player.basePrice)}
+          </option>
+        `).join("")}
+      </select>
+    `,
     async () => {
-      const player = availablePlayers.find(
-        item => item.id === $("auctionPlayerId").value
+      const player = available.find(
+        item => item.id === $("auctionPlayer").value
       );
 
-      if (!player) throw new Error("Player select karein.");
+      if (!player) throw new Error("Please select a player.");
 
       await addDoc(collection(db, "auctions"), {
         playerId: player.id,
@@ -836,87 +1048,16 @@ window.startAuction = function () {
         createdAt: serverTimestamp()
       });
 
-      message("Auction start ho gaya!");
+      showMessage("Auction started successfully.");
       window.show("auction");
-    },
-    "Jis player ka auction start karna hai use select karein."
+    }
   );
 };
-
-// ---------------- PLACE BID ----------------
-
-async function placeBid(auctionId, teamId, amount) {
-  if (!currentUser) {
-    message("Please login first.", "error");
-    return;
-  }
-
-  const auction = auctions.find(item => item.id === auctionId);
-
-  if (!auction) {
-    message("Auction nahi mila.", "error");
-    return;
-  }
-
-  if (!Number.isFinite(amount) || amount <= Number(auction.currentBid || 0)) {
-    message("Bid current bid se zyada honi chahiye.", "error");
-    return;
-  }
-
-  try {
-    await runTransaction(db, async transaction => {
-      const auctionRef = doc(db, "auctions", auctionId);
-      const teamRef = doc(db, "teams", teamId);
-
-      const auctionSnap = await transaction.get(auctionRef);
-      const teamSnap = await transaction.get(teamRef);
-
-      if (!auctionSnap.exists() || !teamSnap.exists()) {
-        throw new Error("Auction ya team nahi mili.");
-      }
-
-      const latestAuction = auctionSnap.data();
-      const latestTeam = teamSnap.data();
-
-      if (latestAuction.status !== "live") {
-        throw new Error("Ye auction ab live nahi hai.");
-      }
-
-      if (amount <= Number(latestAuction.currentBid || 0)) {
-        throw new Error("Kisi aur ne higher bid laga di. Dobara try karein.");
-      }
-
-      const remainingBudget = Number(
-        latestTeam.remainingBudget ?? latestTeam.budget ?? 0
-      );
-
-      if (amount > remainingBudget) {
-        throw new Error("Team ka remaining budget is bid ke liye kaafi nahi hai.");
-      }
-
-      transaction.update(auctionRef, {
-        currentBid: amount,
-        teamId,
-        teamName: latestTeam.name || "Team",
-        updatedAt: serverTimestamp()
-      });
-    });
-
-    message("Bid successfully placed!");
-  } catch (error) {
-    message(friendlyError(error), "error");
-  }
-}
 
 // ---------------- CLOSE AUCTION ----------------
 
 async function closeAuction(auctionId) {
-  const auction = auctions.find(item => item.id === auctionId);
-
-  if (!auction) {
-    message("Auction nahi mila.", "error");
-    return;
-  }
+  if (!requireEditor()) return;
 
   try {
     await runTransaction(db, async transaction => {
@@ -924,13 +1065,13 @@ async function closeAuction(auctionId) {
       const auctionSnap = await transaction.get(auctionRef);
 
       if (!auctionSnap.exists()) {
-        throw new Error("Auction record nahi mila.");
+        throw new Error("Auction not found.");
       }
 
-      const latest = auctionSnap.data();
+      const auction = auctionSnap.data();
 
-      if (latest.status !== "live") {
-        throw new Error("Auction pehle hi close ho chuka hai.");
+      if (auction.status !== "live") {
+        throw new Error("This auction has already been closed.");
       }
 
       let teamRef = null;
@@ -938,61 +1079,217 @@ async function closeAuction(auctionId) {
       let playerRef = null;
       let playerSnap = null;
 
-      // Saare reads writes se pehle hone chahiye.
-      if (latest.teamId) {
-        teamRef = doc(db, "teams", latest.teamId);
+      if (auction.teamId) {
+        teamRef = doc(db, "teams", auction.teamId);
         teamSnap = await transaction.get(teamRef);
       }
 
-      if (latest.playerId) {
-        playerRef = doc(db, "players", latest.playerId);
+      if (auction.playerId) {
+        playerRef = doc(db, "players", auction.playerId);
         playerSnap = await transaction.get(playerRef);
       }
 
-      if (latest.teamId && !teamSnap?.exists()) {
-        throw new Error("Winning team nahi mili.");
+      if (auction.teamId && !teamSnap?.exists()) {
+        throw new Error("Winning team not found.");
       }
 
-      if (latest.teamId && teamSnap?.exists()) {
-        const teamData = teamSnap.data();
+      if (auction.teamId && teamSnap?.exists()) {
+        const team = teamSnap.data();
         const remaining = Number(
-          teamData.remainingBudget ?? teamData.budget ?? 0
-        ) - Number(latest.currentBid || 0);
+          team.remainingBudget ?? team.budget ?? 0
+        ) - Number(auction.currentBid || 0);
 
         if (remaining < 0) {
-          throw new Error("Winning team ka budget insufficient hai.");
+          throw new Error("The winning team does not have enough budget.");
         }
 
-        transaction.update(teamRef, {
-          remainingBudget: remaining
-        });
+        transaction.update(teamRef, { remainingBudget: remaining });
       }
 
       transaction.update(auctionRef, {
-        status: latest.teamId ? "Sold" : "Unsold",
+        status: auction.teamId ? "Sold" : "Unsold",
         closedAt: serverTimestamp()
       });
 
       if (playerRef && playerSnap?.exists()) {
-        transaction.update(playerRef, latest.teamId
+        transaction.update(playerRef, auction.teamId
           ? {
               status: "Sold",
-              soldTo: latest.teamName || "",
-              soldPrice: Number(latest.currentBid || 0)
+              soldTo: auction.teamName || "",
+              soldPrice: Number(auction.currentBid || 0)
             }
-          : {
-              status: "Unsold"
-            }
+          : { status: "Unsold" }
         );
       }
     });
 
-    message(
-      auction.teamId
-        ? `Auction close ho gaya. Winner: ${auction.teamName || "Team"}`
-        : "Auction close ho gaya. Player unsold raha."
-    );
+    showMessage("Auction closed successfully.");
   } catch (error) {
-    message(friendlyError(error), "error");
+    showMessage(errorText(error), "error");
   }
+}
+
+// ---------------- ADD PLAYER / TEAM MODALS ----------------
+
+function openFormModal(title, fieldsHtml, onSubmit) {
+  document.getElementById("dynamicActionModal")?.remove();
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "dynamicActionModal";
+  backdrop.className = "modal-backdrop";
+
+  backdrop.innerHTML = `
+    <div class="modal box" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>${safe(title)}</h2>
+        <button type="button" class="icon-btn" id="actionClose">✕</button>
+      </div>
+
+      <form id="dynamicActionForm">
+        ${fieldsHtml}
+        <button type="submit" class="primary-btn full-btn">Save</button>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+
+  $("actionClose").addEventListener("click", close);
+
+  backdrop.addEventListener("click", event => {
+    if (event.target === backdrop) close();
+  });
+
+  $("dynamicActionForm").addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!requireEditor()) return;
+
+    const button = event.currentTarget.querySelector('button[type="submit"]');
+    button.disabled = true;
+    button.textContent = "Saving...";
+
+    try {
+      await onSubmit();
+      close();
+    } catch (error) {
+      showMessage(errorText(error), "error");
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = "Save";
+      }
+    }
+  });
+}
+
+window.addPlayer = function () {
+  if (!requireEditor()) return;
+
+  openFormModal(
+    "Register Player",
+    `
+      <label for="newPlayerName">Player Name</label>
+      <input id="newPlayerName" required maxlength="100">
+
+      <label for="newPlayerRole">Playing Role</label>
+      <select id="newPlayerRole" required>
+        <option value="Batsman">Batsman</option>
+        <option value="Bowler">Bowler</option>
+        <option value="All-rounder">All-rounder</option>
+        <option value="Wicketkeeper">Wicketkeeper</option>
+      </select>
+
+      <label for="newPlayerPrice">Base Price (₹)</label>
+      <input id="newPlayerPrice" type="number" min="0" step="1" required>
+    `,
+    async () => {
+      const name = $("newPlayerName").value.trim();
+      const role = $("newPlayerRole").value;
+      const basePrice = Number($("newPlayerPrice").value);
+
+      if (!name || !Number.isFinite(basePrice) || basePrice < 0) {
+        throw new Error("Enter a valid player name and base price.");
+      }
+
+      await addDoc(collection(db, "players"), {
+        name,
+        role,
+        basePrice,
+        status: "Available",
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp()
+      });
+
+      showMessage("Player registered successfully.");
+    }
+  );
+};
+
+window.addTeam = function () {
+  if (!requireEditor()) return;
+
+  openFormModal(
+    "Create Team",
+    `
+      <label for="newTeamName">Team Name</label>
+      <input id="newTeamName" required maxlength="100">
+
+      <label for="newTeamOwner">Owner Name</label>
+      <input id="newTeamOwner" maxlength="100">
+
+      <label for="newTeamBudget">Team Budget (₹)</label>
+      <input id="newTeamBudget" type="number" min="1" step="1" required>
+    `,
+    async () => {
+      const name = $("newTeamName").value.trim();
+      const owner = $("newTeamOwner").value.trim() ||
+        currentUser.displayName || currentUser.email || "Team Owner";
+      const budget = Number($("newTeamBudget").value);
+
+      if (!name || !Number.isFinite(budget) || budget <= 0) {
+        throw new Error("Enter a valid team name and budget.");
+      }
+
+      await addDoc(collection(db, "teams"), {
+        name,
+        owner,
+        budget,
+        remainingBudget: budget,
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp()
+      });
+
+      showMessage("Team created successfully.");
+    }
+  );
+};
+
+// ---------------- HISTORY ----------------
+
+function renderHistory() {
+  const container = $("hist");
+  if (!container) return;
+
+  const finished = auctions.filter(item => item.status !== "live");
+
+  if (!finished.length) {
+    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = finished
+    .slice()
+    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
+    .map(auction => `
+      <article class="box content-card">
+        <span class="eyebrow">AUCTION HISTORY</span>
+        <h3>${safe(auction.playerName || "Player")}</h3>
+        <p><strong>Winner:</strong> ${safe(auction.teamName || "No winning team")}</p>
+        <p><strong>Final Bid:</strong> ${money(auction.currentBid)}</p>
+        <p><strong>Status:</strong> ${safe(auction.status)}</p>
+      </article>
+    `).join("");
 }
