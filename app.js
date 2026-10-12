@@ -1,5 +1,4 @@
-import { firebaseConfig } from  "./firebase-config.js";
-
+import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
 import {
@@ -42,11 +41,12 @@ let unsubscribePlayers = null;
 let unsubscribeTeams = null;
 let unsubscribeAuctions = null;
 
-// Track status: Login mode ya Register mode
+// Mode state maintain karne ke liye
 let isRegisterMode = false;
 
 function message(text, type = "success") {
   const box = $("message");
+  if (!box) return;
   box.textContent = text;
   box.className = `message ${type}`;
   box.hidden = false;
@@ -58,7 +58,7 @@ function message(text, type = "success") {
 }
 
 function friendlyError(error) {
-    const errors = {
+  const errors = {
     "auth/invalid-email": "The email address is invalid.",
     "auth/invalid-credential": "Incorrect email or password.",
     "auth/user-not-found": "Account not found. Please switch to register mode to create a new account.",
@@ -72,14 +72,15 @@ function friendlyError(error) {
     "firestore/permission-denied": "Firebase Firestore Rules permission denied."
   };
 
-
-  return errors[error.code] || error.message || "Error Try Agine.";
+  return errors[error.code] || error.message || "An error occurred. Please try again.";
 }
 
 // ---- FEATURE 1: SHOW/HIDE PASSWORD TOGGLE ----
 window.togglePasswordVisibility = function () {
   const passwordInput = $("pass");
   const eyeIcon = $("eyeIcon");
+  
+  if (!passwordInput || !eyeIcon) return;
   
   if (passwordInput.type === "password") {
     passwordInput.type = "text";
@@ -95,13 +96,13 @@ window.handleForgotPassword = async function () {
   const email = $("email").value.trim();
   
   if (!email) {
-   message("Please enter your email address in the input field first!", "error");
+    message("Please enter your email address in the input field first!", "error");
     return;
   }
   
   try {
     await sendPasswordResetEmail(auth, email);
-   message("password reset link has been sent to your email!");
+    message("A password reset link has been sent to your email!");
   } catch (error) {
     message(friendlyError(error), "error");
   }
@@ -117,12 +118,16 @@ window.toggleAuthMode = function () {
   
   if (isRegisterMode) {
     if (formTitle) formTitle.textContent = "Create Account";
-    submitBtn.textContent = "Register Now";
-    switchToggleText.innerHTML = 'Already have an account? <span onclick="toggleAuthMode()" style="color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;">Login here</span>';
+    if (submitBtn) submitBtn.textContent = "Register Now";
+    if (switchToggleText) {
+      switchToggleText.innerHTML = 'Already have an account? <span onclick="toggleAuthMode()" style="color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;">Login here</span>';
+    }
   } else {
     if (formTitle) formTitle.textContent = "Welcome back";
-    submitBtn.textContent = "Login / Register";
-    switchToggleText.innerHTML = 'New here? <span onclick="toggleAuthMode()" style="color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;">Create an account</span>';
+    if (submitBtn) submitBtn.textContent = "Login / Register";
+    if (switchToggleText) {
+      switchToggleText.innerHTML = 'New here? <span onclick="toggleAuthMode()" style="color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;">Create an account</span>';
+    }
   }
 };
 
@@ -139,10 +144,12 @@ $("loginForm").addEventListener("submit", async event => {
 
   try {
     if (isRegisterMode) {
+      // Register Mode
       await createUserWithEmailAndPassword(auth, email, password);
       localStorage.setItem("auctionRole", selectedRole);
-      message("Account successfully create ");
+      message("Account successfully created!");
     } else {
+      // Login Mode
       try {
         await signInWithEmailAndPassword(auth, email, password);
         localStorage.setItem("auctionRole", selectedRole);
@@ -154,10 +161,9 @@ $("loginForm").addEventListener("submit", async event => {
           "auth/invalid-login-credentials"
         ].includes(error.code);
 
-        if (canRegister && confirm("Login failed. Do you want to create a new account with this email?")) {
-          await createUserWithEmailAndPassword(auth, email, password);
-          localStorage.setItem("auctionRole", selectedRole);
-          message("Account successfully create ");
+        // POPUP KO HATAKAR YAHAN DIRECT WEBSITE PAR MESSAGE DIKHA DIYA HAI
+        if (canRegister) {
+          message("Login failed. If you don't have an account, click 'Create an account' below to register.", "error");
         } else {
           throw error;
         }
@@ -235,7 +241,7 @@ $("emailForm").addEventListener("submit", async event => {
   event.preventDefault();
 
   if (!currentUser || !currentUser.email) {
- message("Please login with your email and password first.", "error");
+    message("Please login with your email and password first.", "error");
     return;
   }
 
@@ -243,7 +249,7 @@ $("emailForm").addEventListener("submit", async event => {
   const password = $("currentPassword").value;
 
   if (newEmail === currentUser.email) {
-   message("This is already your current email address.", "error");
+    message("This is already your current email address.", "error");
     return;
   }
 
@@ -252,7 +258,7 @@ $("emailForm").addEventListener("submit", async event => {
     await reauthenticateWithCredential(currentUser, credential);
     await verifyBeforeUpdateEmail(currentUser, newEmail);
 
-   message("verification email has been sent. Please open the link in your inbox.");
+    message("A verification email has been sent. Please open the link in your inbox.");
     $("emailForm").reset();
     $("settingsModal").hidden = true;
   } catch (error) {
@@ -332,10 +338,3 @@ function updateCounts() {
 function safeText(value) {
   const element = document.createElement("span");
   element.textContent = String(value ?? "");
-  return element.innerHTML;
-}
-
-function renderPlayers() {
-  const list = $("plist");
-
-  if (!players.length) {
