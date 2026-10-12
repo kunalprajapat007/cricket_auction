@@ -1300,7 +1300,8 @@ function renderHistory() {
   const finished = auctions.filter(item => item.status !== "live");
 
   if (!finished.length) {
-    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
+    container.innerHTML =
+      `<div class="box empty-state">No completed auctions yet.</div>`;
     return;
   }
 
@@ -1317,3 +1318,383 @@ function renderHistory() {
       </article>
     `).join("");
 }
+
+// ---------------- PROFILE MENU ----------------
+
+window.toggleProfile = function () {
+  const menu = $("profileMenu");
+
+  if (menu) {
+    menu.hidden = !menu.hidden;
+  }
+};
+
+// ---------------- SETTINGS ----------------
+
+window.openSettings = function () {
+  const menu = $("profileMenu");
+  if (menu) menu.hidden = true;
+
+  renderSettings();
+
+  const modal = $("settingsModal");
+  if (modal) modal.hidden = false;
+};
+
+window.closeSettings = function () {
+  const modal = $("settingsModal");
+  if (modal) modal.hidden = true;
+};
+
+window.logout = async function () {
+  try {
+    await signOut(auth);
+    localStorage.removeItem("auctionRole");
+    showMessage("You have signed out.");
+  } catch (error) {
+    showMessage(errorText(error), "error");
+  }
+};
+
+// ---------------- SETTINGS INTERFACE ----------------
+
+function renderSettings() {
+  const modal = $("settingsModal");
+
+  if (!modal) {
+    showMessage("Settings container was not found in the HTML.", "error");
+    return;
+  }
+
+  modal.innerHTML = `
+    <div class="modal-backdrop" id="settingsBackdrop">
+      <div class="modal box" role="dialog" aria-modal="true">
+
+        <div class="modal-header">
+          <div>
+            <span class="eyebrow">ACCOUNT PREFERENCES</span>
+            <h2>Settings</h2>
+          </div>
+
+          <button type="button" class="icon-btn" id="settingsClose">
+            ✕
+          </button>
+        </div>
+
+        <div class="settings-tabs">
+          <button type="button" data-settings-tab="profile">Profile</button>
+          <button type="button" data-settings-tab="email">Change Email</button>
+          <button type="button" data-settings-tab="password">Change Password</button>
+          <button type="button" data-settings-tab="appearance">Appearance</button>
+        </div>
+
+        <div class="settings-content" id="settingsContent"></div>
+
+      </div>
+    </div>
+  `;
+
+  $("settingsClose").addEventListener("click", window.closeSettings);
+
+  $("settingsBackdrop").addEventListener("click", event => {
+    if (event.target.id === "settingsBackdrop") {
+      window.closeSettings();
+    }
+  });
+
+  modal.querySelectorAll("[data-settings-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      settingsTab = button.dataset.settingsTab;
+      renderSettingsTab();
+    });
+  });
+
+  renderSettingsTab();
+}
+
+function renderSettingsTab() {
+  const content = $("settingsContent");
+  if (!content) return;
+
+  // -------- PROFILE TAB --------
+
+  if (settingsTab === "profile") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Profile Details</h3>
+
+        <p><strong>Email:</strong> ${safe(currentUser?.email || "")}</p>
+        <p><strong>Role:</strong> ${safe(roleLabel(currentRole))}</p>
+
+        <form id="nameForm">
+          <label for="displayNameInput">Full Name</label>
+
+          <input
+            id="displayNameInput"
+            maxlength="80"
+            value="${safe(currentUser?.displayName || "")}"
+            placeholder="Enter your full name"
+            required
+          >
+
+          <button type="submit" class="primary-btn full-btn">
+            Save Name
+          </button>
+        </form>
+      </div>
+    `;
+
+    $("nameForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const name = $("displayNameInput").value.trim();
+
+      if (!name) {
+        showMessage("Please enter your name.", "error");
+        return;
+      }
+
+      try {
+        await updateProfile(currentUser, {
+          displayName: name
+        });
+
+        await setDoc(
+          doc(db, "users", currentUser.uid),
+          {
+            name,
+            email: currentUser.email || "",
+            role: currentRole,
+            updatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
+
+        if ($("profileName")) {
+          $("profileName").textContent = name;
+        }
+
+        if ($("welcomeTitle")) {
+          $("welcomeTitle").textContent = `Welcome, ${name}`;
+        }
+
+        showMessage("Your name has been updated.");
+        renderSettingsTab();
+
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
+    return;
+  }
+
+  // -------- CHANGE EMAIL TAB --------
+
+  if (settingsTab === "email") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Change Email Address</h3>
+
+        <p>Current email: ${safe(currentUser?.email || "")}</p>
+
+        <form id="changeEmailForm">
+          <label for="settingsNewEmail">New Email Address</label>
+
+          <input
+            id="settingsNewEmail"
+            type="email"
+            placeholder="Enter new email address"
+            required
+          >
+
+          <label for="emailPassword">Current Password</label>
+
+          <input
+            id="emailPassword"
+            type="password"
+            placeholder="Enter current password"
+            required
+          >
+
+          <button class="primary-btn full-btn" type="submit">
+            Send Verification Email
+          </button>
+        </form>
+      </div>
+    `;
+
+    $("changeEmailForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const newEmail = $("settingsNewEmail").value.trim();
+      const password = $("emailPassword").value;
+
+      if (!currentUser?.email || newEmail === currentUser.email) {
+        showMessage("Enter a different email address.", "error");
+        return;
+      }
+
+      try {
+        const credential = EmailAuthProvider.credential(
+          currentUser.email,
+          password
+        );
+
+        await reauthenticateWithCredential(currentUser, credential);
+
+        await verifyBeforeUpdateEmail(currentUser, newEmail);
+
+        showMessage(
+          "Verification email sent. Open the link in your new inbox."
+        );
+
+        $("changeEmailForm").reset();
+
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
+    return;
+  }
+
+  // -------- CHANGE PASSWORD TAB --------
+
+  if (settingsTab === "password") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Change Password</h3>
+
+        <form id="changePasswordForm">
+          <label for="oldPassword">Current Password</label>
+
+          <input
+            id="oldPassword"
+            type="password"
+            placeholder="Enter current password"
+            required
+          >
+
+          <label for="newPassword">New Password</label>
+
+          <input
+            id="newPassword"
+            type="password"
+            minlength="6"
+            placeholder="At least 6 characters"
+            required
+          >
+
+          <label for="confirmPassword">Confirm New Password</label>
+
+          <input
+            id="confirmPassword"
+            type="password"
+            minlength="6"
+            placeholder="Re-enter new password"
+            required
+          >
+
+          <button class="primary-btn full-btn" type="submit">
+            Update Password
+          </button>
+        </form>
+      </div>
+    `;
+
+    $("changePasswordForm").addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const oldPassword = $("oldPassword").value;
+      const newPassword = $("newPassword").value;
+      const confirmPassword = $("confirmPassword").value;
+
+      if (newPassword.length < 6) {
+        showMessage(
+          "New password must contain at least 6 characters.",
+          "error"
+        );
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showMessage("The new passwords do not match.", "error");
+        return;
+      }
+
+      try {
+        const credential = EmailAuthProvider.credential(
+          currentUser.email,
+          oldPassword
+        );
+
+        await reauthenticateWithCredential(currentUser, credential);
+
+        await updatePassword(currentUser, newPassword);
+
+        showMessage("Password updated successfully.");
+        $("changePasswordForm").reset();
+
+      } catch (error) {
+        showMessage(errorText(error), "error");
+      }
+    });
+
+    return;
+  }
+
+  // -------- APPEARANCE TAB --------
+
+  if (settingsTab === "appearance") {
+    content.innerHTML = `
+      <div class="setting-panel">
+        <h3>Appearance</h3>
+
+        <label for="themeChoice">Choose Theme</label>
+
+        <select id="themeChoice">
+          <option value="dark">Dark Theme</option>
+          <option value="light">Light Theme</option>
+        </select>
+
+        <button
+          class="primary-btn full-btn"
+          id="saveTheme"
+          type="button"
+        >
+          Apply Theme
+        </button>
+      </div>
+    `;
+
+    $("themeChoice").value =
+      localStorage.getItem("auctionTheme") || "dark";
+
+    $("saveTheme").addEventListener("click", () => {
+      changeTheme($("themeChoice").value);
+    });
+  }
+}
+
+// ---------------- NAVIGATION ----------------
+
+window.show = function (sectionId) {
+  const sections = [
+    "dash",
+    "players",
+    "teams",
+    "auction",
+    "history"
+  ];
+
+  if (!sections.includes(sectionId)) return;
+
+  sections.forEach(id => {
+    const section = $(id);
+
+    if (section) {
+      section.hidden = id !== sectionId;
+    }
+  });
+};
