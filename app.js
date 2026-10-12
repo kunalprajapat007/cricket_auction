@@ -1,4 +1,6 @@
+
 import { firebaseConfig } from "./firebase-config.js";
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
 import {
@@ -21,13 +23,10 @@ import {
   addDoc,
   onSnapshot,
   doc,
-  getDoc,
   setDoc,
   runTransaction,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-// ================= FIREBASE SETUP =================
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -46,8 +45,6 @@ let registerMode = false;
 let settingsTab = "profile";
 
 const isViewer = () => currentRole === "viewer";
-
-// ================= MESSAGES AND HELPERS =================
 
 function showMessage(text, type = "success") {
   const box = $("message");
@@ -83,8 +80,7 @@ function errorText(error) {
     "firestore/permission-denied": "Access denied. Please check your Firebase Firestore Rules."
   };
 
-  return errors[error?.code] || error?.message ||
-    "Something went wrong. Please try again.";
+  return errors[error?.code] || error?.message || "Something went wrong. Please try again.";
 }
 
 function safe(value) {
@@ -126,17 +122,14 @@ function requireEditor() {
   }
 
   if (isViewer()) {
-    showMessage(
-      "Viewer access is read-only. You cannot perform this action.",
-      "error"
-    );
+    showMessage("Viewer access is read-only. You cannot perform this action.", "error");
     return false;
   }
 
   return true;
 }
 
-// ================= THEME =================
+// ---------------- THEME ----------------
 
 function addThemeStyles() {
   if ($("auctionThemeStyles")) return;
@@ -268,11 +261,7 @@ function addThemeStyles() {
 function applyTheme(theme) {
   const chosen = theme === "light" ? "light" : "dark";
 
-  document.body.classList.toggle(
-    "theme-light",
-    chosen === "light"
-  );
-
+  document.body.classList.toggle("theme-light", chosen === "light");
   document.documentElement.style.colorScheme = chosen;
   localStorage.setItem("auctionTheme", chosen);
 
@@ -288,7 +277,7 @@ function changeTheme(theme) {
 addThemeStyles();
 applyTheme(localStorage.getItem("auctionTheme") || "dark");
 
-// ================= AUTH FORM =================
+// ---------------- AUTH FORM ----------------
 
 window.togglePasswordVisibility = function () {
   const input = $("pass");
@@ -321,25 +310,16 @@ window.toggleAuthMode = function () {
   registerMode = !registerMode;
 
   if ($("authTitle")) {
-    $("authTitle").textContent = registerMode
-      ? "Create Account"
-      : "Welcome back";
+    $("authTitle").textContent = registerMode ? "Create Account" : "Welcome back";
   }
 
   if ($("loginBtn")) {
-    $("loginBtn").textContent = registerMode
-      ? "Register Now"
-      : "Login / Register";
+    $("loginBtn").textContent = registerMode ? "Register Now" : "Login / Register";
   }
 
   if ($("pass")) {
-    $("pass").autocomplete = registerMode
-      ? "new-password"
-      : "current-password";
-
-    $("pass").placeholder = registerMode
-      ? "Create password"
-      : "Enter password";
+    $("pass").autocomplete = registerMode ? "new-password" : "current-password";
+    $("pass").placeholder = registerMode ? "Create password" : "Enter password";
   }
 
   if ($("toggleText")) {
@@ -375,11 +355,7 @@ $("loginForm")?.addEventListener("submit", async event => {
 
   try {
     if (registerMode) {
-      const result = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const result = await createUserWithEmailAndPassword(auth, email, password);
 
       await setDoc(doc(db, "users", result.user.uid), {
         email,
@@ -400,14 +376,12 @@ $("loginForm")?.addEventListener("submit", async event => {
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = registerMode
-        ? "Register Now"
-        : "Login / Register";
+      button.textContent = registerMode ? "Register Now" : "Login / Register";
     }
   }
 });
 
-// ================= AUTH STATE =================
+// ---------------- AUTH STATE ----------------
 
 onAuthStateChanged(auth, async user => {
   currentUser = user;
@@ -424,57 +398,16 @@ onAuthStateChanged(auth, async user => {
     return;
   }
 
-  try {
-    const userSnap = await getDoc(doc(db, "users", user.uid));
-
-    if (userSnap.exists()) {
-      const savedRole = String(
-        userSnap.data().role || "viewer"
-      ).trim().toLowerCase();
-
-      const roleMap = {
-        player: "player",
-        "team owner": "teamOwner",
-        teamowner: "teamOwner",
-        team_owner: "teamOwner",
-        viewer: "viewer"
-      };
-
-      currentRole = roleMap[savedRole] || "viewer";
-    } else {
-      currentRole = "viewer";
-
-      showMessage(
-        "No role is saved for this account. Set its role in Firestore users collection.",
-        "error"
-      );
-    }
-  } catch (error) {
-    console.error("Could not load user role:", error);
-    currentRole = "viewer";
-    showMessage("Could not load your role. Check Firestore Rules.", "error");
-  }
+  currentRole = localStorage.getItem("auctionRole") || "viewer";
 
   if ($("login")) $("login").hidden = true;
   if ($("app")) $("app").hidden = false;
   if ($("userTools")) $("userTools").hidden = false;
 
-  if ($("profileEmail")) {
-    $("profileEmail").textContent = user.email || "";
-  }
-
-  if ($("profileRole")) {
-    $("profileRole").textContent = roleLabel(currentRole);
-  }
-
-  if ($("currentEmail")) {
-    $("currentEmail").textContent = user.email || "";
-  }
-
-  if ($("settingsRole")) {
-    $("settingsRole").textContent = roleLabel(currentRole);
-  }
-
+  if ($("profileEmail")) $("profileEmail").textContent = user.email || "";
+  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
+  if ($("currentEmail")) $("currentEmail").textContent = user.email || "";
+  if ($("settingsRole")) $("settingsRole").textContent = roleLabel(currentRole);
   if ($("welcomeTitle")) {
     $("welcomeTitle").textContent =
       `Welcome${user.displayName ? ", " + user.displayName : ""}`;
@@ -486,23 +419,23 @@ onAuthStateChanged(auth, async user => {
   window.show("dash");
 });
 
-// ================= USER PROFILE =================
+// ---------------- USER PROFILE ----------------
 
 async function loadUserProfile() {
   if (!currentUser) return;
 
   try {
-    const snapshot = await getDoc(
-      doc(db, "users", currentUser.uid)
+    const { getDoc } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
     );
+
+    const snapshot = await getDoc(doc(db, "users", currentUser.uid));
 
     if (snapshot.exists()) {
       const data = snapshot.data();
 
       if (data.name && !currentUser.displayName) {
-        await updateProfile(currentUser, {
-          displayName: data.name
-        });
+        await updateProfile(currentUser, { displayName: data.name });
       }
     }
   } catch (error) {
@@ -511,14 +444,10 @@ async function loadUserProfile() {
 
   if ($("profileName")) {
     $("profileName").textContent =
-      currentUser.displayName ||
-      currentUser.email ||
-      "User";
+      currentUser.displayName || currentUser.email || "User";
   }
 
-  if ($("profileEmail")) {
-    $("profileEmail").textContent = currentUser.email || "";
-  }
+  if ($("profileEmail")) $("profileEmail").textContent = currentUser.email || "";
 }
 
 function updateRoleInterface() {
@@ -539,12 +468,10 @@ function updateRoleInterface() {
       : "";
   }
 
-  if ($("profileRole")) {
-    $("profileRole").textContent = roleLabel(currentRole);
-  }
+  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
 }
 
-// ================= PROFILE MENU =================
+// ---------------- PROFILE MENU ----------------
 
 window.toggleProfile = function () {
   const menu = $("profileMenu");
@@ -552,21 +479,14 @@ window.toggleProfile = function () {
 };
 
 window.openSettings = function () {
-  if ($("profileMenu")) {
-    $("profileMenu").hidden = true;
-  }
+  if ($("profileMenu")) $("profileMenu").hidden = true;
 
   renderSettings();
-
-  if ($("settingsModal")) {
-    $("settingsModal").hidden = false;
-  }
+  if ($("settingsModal")) $("settingsModal").hidden = false;
 };
 
 window.closeSettings = function () {
-  if ($("settingsModal")) {
-    $("settingsModal").hidden = true;
-  }
+  if ($("settingsModal")) $("settingsModal").hidden = true;
 };
 
 window.logout = async function () {
@@ -579,11 +499,10 @@ window.logout = async function () {
   }
 };
 
-// ================= SETTINGS INTERFACE =================
+// ---------------- SETTINGS INTERFACE ----------------
 
 function renderSettings() {
   const modal = $("settingsModal");
-
   if (!modal) {
     showMessage("Settings container was not found in the HTML.", "error");
     return;
@@ -612,15 +531,10 @@ function renderSettings() {
     </div>
   `;
 
-  $("settingsClose").addEventListener(
-    "click",
-    window.closeSettings
-  );
+  $("settingsClose").addEventListener("click", window.closeSettings);
 
   $("settingsBackdrop").addEventListener("click", event => {
-    if (event.target.id === "settingsBackdrop") {
-      window.closeSettings();
-    }
+    if (event.target.id === "settingsBackdrop") window.closeSettings();
   });
 
   modal.querySelectorAll("[data-settings-tab]").forEach(button => {
@@ -637,7 +551,6 @@ function renderSettingsTab() {
   const content = $("settingsContent");
   if (!content) return;
 
-  // PROFILE TAB
   if (settingsTab === "profile") {
     content.innerHTML = `
       <div class="setting-panel">
@@ -647,17 +560,11 @@ function renderSettingsTab() {
 
         <form id="nameForm">
           <label for="displayNameInput">Full Name</label>
-          <input
-            id="displayNameInput"
-            maxlength="80"
+          <input id="displayNameInput" maxlength="80"
             value="${safe(currentUser?.displayName || "")}"
-            placeholder="Enter your full name"
-            required
-          >
+            placeholder="Enter your full name" required>
 
-          <button type="submit" class="primary-btn full-btn">
-            Save Name
-          </button>
+          <button type="submit" class="primary-btn full-btn">Save Name</button>
         </form>
       </div>
     `;
@@ -673,9 +580,7 @@ function renderSettingsTab() {
       }
 
       try {
-        await updateProfile(currentUser, {
-          displayName: name
-        });
+        await updateProfile(currentUser, { displayName: name });
 
         await setDoc(doc(db, "users", currentUser.uid), {
           name,
@@ -684,13 +589,8 @@ function renderSettingsTab() {
           updatedAt: serverTimestamp()
         }, { merge: true });
 
-        if ($("profileName")) {
-          $("profileName").textContent = name;
-        }
-
-        if ($("welcomeTitle")) {
-          $("welcomeTitle").textContent = `Welcome, ${name}`;
-        }
+        if ($("profileName")) $("profileName").textContent = name;
+        if ($("welcomeTitle")) $("welcomeTitle").textContent = `Welcome, ${name}`;
 
         showMessage("Your name has been updated.");
         renderSettingsTab();
@@ -702,7 +602,6 @@ function renderSettingsTab() {
     return;
   }
 
-  // CHANGE EMAIL TAB
   if (settingsTab === "email") {
     content.innerHTML = `
       <div class="setting-panel">
@@ -711,20 +610,12 @@ function renderSettingsTab() {
 
         <form id="changeEmailForm">
           <label for="settingsNewEmail">New Email Address</label>
-          <input
-            id="settingsNewEmail"
-            type="email"
-            placeholder="Enter new email address"
-            required
-          >
+          <input id="settingsNewEmail" type="email"
+            placeholder="Enter new email address" required>
 
           <label for="emailPassword">Current Password</label>
-          <input
-            id="emailPassword"
-            type="password"
-            placeholder="Enter current password"
-            required
-          >
+          <input id="emailPassword" type="password"
+            placeholder="Enter current password" required>
 
           <button class="primary-btn full-btn" type="submit">
             Send Verification Email
@@ -750,17 +641,10 @@ function renderSettingsTab() {
           password
         );
 
-        await reauthenticateWithCredential(
-          currentUser,
-          credential
-        );
-
+        await reauthenticateWithCredential(currentUser, credential);
         await verifyBeforeUpdateEmail(currentUser, newEmail);
 
-        showMessage(
-          "Verification email sent. Open the link in your new inbox."
-        );
-
+        showMessage("Verification email sent. Open the link in your new inbox.");
         $("changeEmailForm").reset();
       } catch (error) {
         showMessage(errorText(error), "error");
@@ -770,7 +654,6 @@ function renderSettingsTab() {
     return;
   }
 
-  // CHANGE PASSWORD TAB
   if (settingsTab === "password") {
     content.innerHTML = `
       <div class="setting-panel">
@@ -778,30 +661,16 @@ function renderSettingsTab() {
 
         <form id="changePasswordForm">
           <label for="oldPassword">Current Password</label>
-          <input
-            id="oldPassword"
-            type="password"
-            placeholder="Enter current password"
-            required
-          >
+          <input id="oldPassword" type="password"
+            placeholder="Enter current password" required>
 
           <label for="newPassword">New Password</label>
-          <input
-            id="newPassword"
-            type="password"
-            minlength="6"
-            placeholder="At least 6 characters"
-            required
-          >
+          <input id="newPassword" type="password"
+            minlength="6" placeholder="At least 6 characters" required>
 
           <label for="confirmPassword">Confirm New Password</label>
-          <input
-            id="confirmPassword"
-            type="password"
-            minlength="6"
-            placeholder="Re-enter new password"
-            required
-          >
+          <input id="confirmPassword" type="password"
+            minlength="6" placeholder="Re-enter new password" required>
 
           <button class="primary-btn full-btn" type="submit">
             Update Password
@@ -818,10 +687,7 @@ function renderSettingsTab() {
       const confirmPassword = $("confirmPassword").value;
 
       if (newPassword.length < 6) {
-        showMessage(
-          "New password must contain at least 6 characters.",
-          "error"
-        );
+        showMessage("New password must contain at least 6 characters.", "error");
         return;
       }
 
@@ -836,11 +702,7 @@ function renderSettingsTab() {
           oldPassword
         );
 
-        await reauthenticateWithCredential(
-          currentUser,
-          credential
-        );
-
+        await reauthenticateWithCredential(currentUser, credential);
         await updatePassword(currentUser, newPassword);
 
         showMessage("Password updated successfully.");
@@ -853,30 +715,24 @@ function renderSettingsTab() {
     return;
   }
 
-  // APPEARANCE TAB
   if (settingsTab === "appearance") {
     content.innerHTML = `
       <div class="setting-panel">
         <h3>Appearance</h3>
-
         <label for="themeChoice">Choose Theme</label>
+
         <select id="themeChoice">
           <option value="dark">Dark Theme</option>
           <option value="light">Light Theme</option>
         </select>
 
-        <button
-          class="primary-btn full-btn"
-          id="saveTheme"
-          type="button"
-        >
+        <button class="primary-btn full-btn" id="saveTheme" type="button">
           Apply Theme
         </button>
       </div>
     `;
 
-    $("themeChoice").value =
-      localStorage.getItem("auctionTheme") || "dark";
+    $("themeChoice").value = localStorage.getItem("auctionTheme") || "dark";
 
     $("saveTheme").addEventListener("click", () => {
       changeTheme($("themeChoice").value);
@@ -884,16 +740,10 @@ function renderSettingsTab() {
   }
 }
 
-// ================= NAVIGATION =================
+// ---------------- NAVIGATION ----------------
 
 window.show = function (sectionId) {
-  const sections = [
-    "dash",
-    "players",
-    "teams",
-    "auction",
-    "history"
-  ];
+  const sections = ["dash", "players", "teams", "auction", "history"];
 
   if (!sections.includes(sectionId)) return;
 
@@ -903,23 +753,15 @@ window.show = function (sectionId) {
   });
 
   document.querySelectorAll(".nav-btn").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.section === sectionId
-    );
+    button.classList.toggle("active", button.dataset.section === sectionId);
   });
 
-  if ($("profileMenu")) {
-    $("profileMenu").hidden = true;
-  }
+  if ($("profileMenu")) $("profileMenu").hidden = true;
 
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-// ================= LIVE DATA =================
+// ---------------- LIVE DATA ----------------
 
 function listenToData() {
   stopDataListeners();
@@ -927,11 +769,7 @@ function listenToData() {
   stopPlayers = onSnapshot(
     collection(db, "players"),
     snapshot => {
-      players = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
+      players = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderPlayers();
       updateCounts();
     },
@@ -941,11 +779,7 @@ function listenToData() {
   stopTeams = onSnapshot(
     collection(db, "teams"),
     snapshot => {
-      teams = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
+      teams = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderTeams();
       updateCounts();
     },
@@ -955,11 +789,7 @@ function listenToData() {
   stopAuctions = onSnapshot(
     collection(db, "auctions"),
     snapshot => {
-      auctions = snapshot.docs.map(item => ({
-        id: item.id,
-        ...item.data()
-      }));
-
+      auctions = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderAuctions();
       renderHistory();
       updateCounts();
@@ -972,29 +802,22 @@ function updateCounts() {
   if ($("pc")) $("pc").textContent = players.length;
   if ($("tc")) $("tc").textContent = teams.length;
 
+  // IMPORTANT: Count only live auctions, not all auction records.
   const count = liveAuctions().length;
 
   if ($("bc")) $("bc").textContent = count;
-  if ($("liveAuctionCount")) {
-    $("liveAuctionCount").textContent = count;
-  }
-  if ($("auctionCount")) {
-    $("auctionCount").textContent = count;
-  }
+  if ($("liveAuctionCount")) $("liveAuctionCount").textContent = count;
+  if ($("auctionCount")) $("auctionCount").textContent = count;
 }
 
-// ================= PLAYER LIST =================
+// ---------------- PLAYER LIST ----------------
 
 function renderPlayers() {
   const container = $("plist");
   if (!container) return;
 
   if (!players.length) {
-    container.innerHTML = `
-      <div class="box empty-state">
-        No players have been registered yet.
-      </div>
-    `;
+    container.innerHTML = `<div class="box empty-state">No players have been registered yet.</div>`;
     return;
   }
 
@@ -1009,18 +832,14 @@ function renderPlayers() {
   `).join("");
 }
 
-// ================= TEAM LIST =================
+// ---------------- TEAM LIST ----------------
 
 function renderTeams() {
   const container = $("tlist");
   if (!container) return;
 
   if (!teams.length) {
-    container.innerHTML = `
-      <div class="box empty-state">
-        No teams have been created yet.
-      </div>
-    `;
+    container.innerHTML = `<div class="box empty-state">No teams have been created yet.</div>`;
     return;
   }
 
@@ -1035,7 +854,7 @@ function renderTeams() {
   `).join("");
 }
 
-// ================= LIVE AUCTIONS AND BIDDING =================
+// ---------------- LIVE AUCTIONS + BIDDING ----------------
 
 function renderAuctions() {
   const container = $("live");
@@ -1044,11 +863,7 @@ function renderAuctions() {
   const active = liveAuctions();
 
   if (!active.length) {
-    container.innerHTML = `
-      <div class="box empty-state">
-        There are currently no live auctions.
-      </div>
-    `;
+    container.innerHTML = `<div class="box empty-state">There are currently no live auctions.</div>`;
     return;
   }
 
@@ -1083,13 +898,8 @@ function renderAuctions() {
           >
 
           <button type="submit" class="primary-btn">Place Bid</button>
-          <button
-            type="button"
-            class="secondary-btn"
-            data-close-auction="${safe(auction.id)}"
-          >
-            Close Auction
-          </button>
+          <button type="button" class="secondary-btn"
+            data-close-auction="${safe(auction.id)}">Close Auction</button>
         </form>
       ` : `
         <p class="viewer-note">View-only mode. Bidding is disabled.</p>
@@ -1150,6 +960,7 @@ async function placeBid(auctionId, teamId, amount) {
       const auctionRef = doc(db, "auctions", auctionId);
       const teamRef = doc(db, "teams", teamId);
 
+      // All reads happen before any writes.
       const auctionSnap = await transaction.get(auctionRef);
       const teamSnap = await transaction.get(teamRef);
 
@@ -1173,9 +984,7 @@ async function placeBid(auctionId, teamId, amount) {
       );
 
       if (amount > remaining) {
-        throw new Error(
-          "The selected team does not have enough remaining budget."
-        );
+        throw new Error("The selected team does not have enough remaining budget.");
       }
 
       transaction.update(auctionRef, {
@@ -1192,7 +1001,7 @@ async function placeBid(auctionId, teamId, amount) {
   }
 }
 
-// ================= START AUCTION =================
+// ---------------- START AUCTION ----------------
 
 window.startAuction = function () {
   if (!requireEditor()) return;
@@ -1200,16 +1009,12 @@ window.startAuction = function () {
   const available = players.filter(player =>
     player.status !== "Sold" &&
     !auctions.some(auction =>
-      auction.playerId === player.id &&
-      auction.status === "live"
+      auction.playerId === player.id && auction.status === "live"
     )
   );
 
   if (!available.length) {
-    showMessage(
-      "No available players. Register a player first.",
-      "error"
-    );
+    showMessage("No available players. Register a player first.", "error");
     return;
   }
 
@@ -1230,9 +1035,7 @@ window.startAuction = function () {
         item => item.id === $("auctionPlayer").value
       );
 
-      if (!player) {
-        throw new Error("Please select a player.");
-      }
+      if (!player) throw new Error("Please select a player.");
 
       await addDoc(collection(db, "auctions"), {
         playerId: player.id,
@@ -1251,7 +1054,7 @@ window.startAuction = function () {
   );
 };
 
-// ================= CLOSE AUCTION =================
+// ---------------- CLOSE AUCTION ----------------
 
 async function closeAuction(auctionId) {
   if (!requireEditor()) return;
@@ -1297,14 +1100,10 @@ async function closeAuction(auctionId) {
         ) - Number(auction.currentBid || 0);
 
         if (remaining < 0) {
-          throw new Error(
-            "The winning team does not have enough budget."
-          );
+          throw new Error("The winning team does not have enough budget.");
         }
 
-        transaction.update(teamRef, {
-          remainingBudget: remaining
-        });
+        transaction.update(teamRef, { remainingBudget: remaining });
       }
 
       transaction.update(auctionRef, {
@@ -1313,17 +1112,13 @@ async function closeAuction(auctionId) {
       });
 
       if (playerRef && playerSnap?.exists()) {
-        transaction.update(
-          playerRef,
-          auction.teamId
-            ? {
-                status: "Sold",
-                soldTo: auction.teamName || "",
-                soldPrice: Number(auction.currentBid || 0)
-              }
-            : {
-                status: "Unsold"
-              }
+        transaction.update(playerRef, auction.teamId
+          ? {
+              status: "Sold",
+              soldTo: auction.teamName || "",
+              soldPrice: Number(auction.currentBid || 0)
+            }
+          : { status: "Unsold" }
         );
       }
     });
@@ -1334,7 +1129,7 @@ async function closeAuction(auctionId) {
   }
 }
 
-// ================= DYNAMIC FORM MODAL =================
+// ---------------- ADD PLAYER / TEAM MODALS ----------------
 
 function openFormModal(title, fieldsHtml, onSubmit) {
   document.getElementById("dynamicActionModal")?.remove();
@@ -1372,10 +1167,7 @@ function openFormModal(title, fieldsHtml, onSubmit) {
 
     if (!requireEditor()) return;
 
-    const button = event.currentTarget.querySelector(
-      'button[type="submit"]'
-    );
-
+    const button = event.currentTarget.querySelector('button[type="submit"]');
     button.disabled = true;
     button.textContent = "Saving...";
 
@@ -1392,8 +1184,6 @@ function openFormModal(title, fieldsHtml, onSubmit) {
     }
   });
 }
-
-// ================= ADD PLAYER =================
 
 window.addPlayer = function () {
   if (!requireEditor()) return;
@@ -1413,13 +1203,7 @@ window.addPlayer = function () {
       </select>
 
       <label for="newPlayerPrice">Base Price (₹)</label>
-      <input
-        id="newPlayerPrice"
-        type="number"
-        min="0"
-        step="1"
-        required
-      >
+      <input id="newPlayerPrice" type="number" min="0" step="1" required>
     `,
     async () => {
       const name = $("newPlayerName").value.trim();
@@ -1427,9 +1211,7 @@ window.addPlayer = function () {
       const basePrice = Number($("newPlayerPrice").value);
 
       if (!name || !Number.isFinite(basePrice) || basePrice < 0) {
-        throw new Error(
-          "Enter a valid player name and base price."
-        );
+        throw new Error("Enter a valid player name and base price.");
       }
 
       await addDoc(collection(db, "players"), {
@@ -1446,8 +1228,6 @@ window.addPlayer = function () {
   );
 };
 
-// ================= ADD TEAM =================
-
 window.addTeam = function () {
   if (!requireEditor()) return;
 
@@ -1461,27 +1241,16 @@ window.addTeam = function () {
       <input id="newTeamOwner" maxlength="100">
 
       <label for="newTeamBudget">Team Budget (₹)</label>
-      <input
-        id="newTeamBudget"
-        type="number"
-        min="1"
-        step="1"
-        required
-      >
+      <input id="newTeamBudget" type="number" min="1" step="1" required>
     `,
     async () => {
       const name = $("newTeamName").value.trim();
       const owner = $("newTeamOwner").value.trim() ||
-        currentUser.displayName ||
-        currentUser.email ||
-        "Team Owner";
-
+        currentUser.displayName || currentUser.email || "Team Owner";
       const budget = Number($("newTeamBudget").value);
 
       if (!name || !Number.isFinite(budget) || budget <= 0) {
-        throw new Error(
-          "Enter a valid team name and budget."
-        );
+        throw new Error("Enter a valid team name and budget.");
       }
 
       await addDoc(collection(db, "teams"), {
@@ -1498,32 +1267,22 @@ window.addTeam = function () {
   );
 };
 
-// ================= AUCTION HISTORY =================
+// ---------------- HISTORY ----------------
 
 function renderHistory() {
   const container = $("hist");
   if (!container) return;
 
-  const finished = auctions.filter(
-    item => item.status !== "live"
-  );
+  const finished = auctions.filter(item => item.status !== "live");
 
   if (!finished.length) {
-    container.innerHTML = `
-      <div class="box empty-state">
-        No completed auctions yet.
-      </div>
-    `;
+    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
     return;
   }
 
   container.innerHTML = finished
     .slice()
-    .sort(
-      (a, b) =>
-        (b.closedAt?.seconds || 0) -
-        (a.closedAt?.seconds || 0)
-    )
+    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
     .map(auction => `
       <article class="box content-card">
         <span class="eyebrow">AUCTION HISTORY</span>
