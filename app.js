@@ -1314,6 +1314,27 @@ if (!finished.length) {
 
 // ================= NAYE CODE KI SHURUAT YAHAN SE HAI =================
 
+if (!finished.length) {
+    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = finished
+    .slice()
+    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
+    .map(auction => `
+      <article class="box content-card">
+        <span class="eyebrow">AUCTION HISTORY</span>
+        <h3>${safe(auction.playerName || "Player")}</h3>
+        <p><strong>Winner:</strong> ${safe(auction.teamName || "No winning team")}</p>
+        <p><strong>Final Bid:</strong> ${money(auction.currentBid)}</p>
+        <p><strong>Status:</strong> ${safe(auction.status)}</p>
+      </article>
+    `).join("");
+}
+
+// ================= FIXED CODE YAHAN SE PASTE KAREIN =================
+
 window.toggleProfile = function () {
   const menu = document.getElementById("profileMenu");
   if (menu) menu.hidden = !menu.hidden;
@@ -1593,3 +1614,8 @@ window.show = function (sectionId) {
     if (section) section.hidden = (id !== sectionId);
   });
 };
+
+
+
+ 
+ 
