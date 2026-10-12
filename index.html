@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,7 +50,7 @@
       <div class="box login-box">
         <div class="login-heading">
           <span class="login-symbol">🏆</span>
-          <h2>Welcome back</h2>
+          <h2 id="authTitle">Welcome back</h2>
           <p>Login or create your account</p>
         </div>
 
@@ -60,7 +59,16 @@
           <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required>
 
           <label for="pass">Password</label>
-          <input id="pass" type="password" placeholder="Enter password (6+ characters)" autocomplete="current-password" minlength="6" required>
+          <!-- Password Input Wrapper with Eye Toggle Button -->
+          <div class="password-wrapper" style="position: relative; width: 100%;">
+            <input id="pass" type="password" placeholder="Enter password (6+ characters)" autocomplete="current-password" minlength="6" style="padding-right: 44px;" required>
+            <button type="button" id="eyeIcon" onclick="togglePasswordVisibility()" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: transparent; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; user-select: none;">👁️</button>
+          </div>
+
+          <!-- Forgot Password Action Link Container -->
+          <div class="forgot-container" style="display: flex; justify-content: flex-end; margin-top: 6px; margin-bottom: 2px;">
+            <button type="button" class="forgot-link-text" onclick="handleForgotPassword()" style="font-size: 12px; font-weight: 500; color: var(--accent2); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;">Forgot Password?</button>
+          </div>
 
           <label for="role">Continue as</label>
           <select id="role">
@@ -71,7 +79,11 @@
 
           <button class="primary-btn full-btn" type="submit" id="loginBtn">Login / Register</button>
         </form>
-        <p class="muted-note">New here? Enter your email and password. If the account does not exist, you'll be asked to create it.</p>
+        
+        <!-- Toggle Auth account trigger footer description -->
+        <p class="toggle-auth-note muted-note" id="toggleText" style="text-align: center; margin-top: 18px;">
+          New here? <span onclick="toggleAuthMode()" style="color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600;">Create an account</span>
+        </p>
       </div>
     </section>
 
