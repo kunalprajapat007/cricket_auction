@@ -326,3 +326,13 @@ footer span { padding: 0 5px; color: var(--accent); }
   .nav-tabs { gap: 4px; }
   .nav-btn { padding: 10px; font-size: 12px; }
 }
+/* Custom styles for login updates */
+.password-wrapper input {
+  padding-right: 44px; /* text eye icon ke piche na jaye */
+}
+.forgot-link-text:hover {
+  filter: brightness(1.2);
+}
+.toggle-auth-note span:hover {
+  filter: brightness(1.2);
+}
