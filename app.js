@@ -944,7 +944,7 @@ function renderPlayers() {
       data-player-details="${safe(player.id)}"
       tabindex="0" role="button"
       aria-label="View ${safe(player.name || "player")} details">
-      <span class="eyebrow">PLAYER · CLICK FOR DETAILS</span>
+      <span class="eyebrow">PLAYER </span>
       <h3>${safe(player.name || "Unnamed Player")}</h3>
       <p>${safe(player.role || "Player")}</p>
       <p><strong>Base Price:</strong> ${money(player.basePrice ?? BID_INCREMENT)}</p>
@@ -986,7 +986,7 @@ function renderTeams() {
       data-team-details="${safe(team.id)}"
       tabindex="0" role="button"
       aria-label="View ${safe(team.name || "team")} details">
-      <span class="eyebrow">TEAM · CLICK FOR DETAILS</span>
+      <span class="eyebrow">TEAM </span>
       <h3>${safe(team.name || "Unnamed Team")}</h3>
       <p><strong>Owner:</strong> ${safe(team.owner || "Not specified")}</p>
       <p><strong>Budget:</strong> ${money(team.budget ?? TEAM_BUDGET)}</p>
