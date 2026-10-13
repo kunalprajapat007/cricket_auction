@@ -304,20 +304,42 @@ function addThemeStyles() {
     /* Compact centered player/team details popup */
    
 
-.detail-fullscreen-inner {
-  width: min(100%, 1100px);
-  margin: 0 auto;
-}
 
-.detail-fullscreen .detail-row {
-  padding: 18px 4px;
-  font-size: clamp(15px, 1.6vw, 19px);
-}
+    /* Compact centered player/team details popup */
+    #detailModal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.65);
+    }
 
-.detail-fullscreen .detail-page-title {
-  font-size: clamp(28px, 4vw, 44px);
-  margin: 0;
-}
+    #detailModal .detail-popup {
+      width: 100%;
+      max-width: 440px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px;
+      box-sizing: border-box;
+      border-radius: 14px;
+      background: var(--card, #151c2e);
+      color: var(--text, #ffffff);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    #detailModal .detail-page-title {
+      font-size: 22px;
+      margin: 0;
+    }
+
+    #detailModal .detail-row {
+      padding: 10px 0;
+      font-size: 14px;
+    }
 
   `;
 
