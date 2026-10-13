@@ -303,33 +303,20 @@ function addThemeStyles() {
     
     /* Compact centered player/team details popup */
    
-    /* Player/team details popup */
-    .detail-popup {
-      width: min(100%, 440px);
-      max-height: 80vh;
-      overflow-y: auto;
-      padding: 20px;
-      border-radius: 14px;
-      background: var(--card, #151c2e);
-      color: var(--text, #ffffff);
-      box-sizing: border-box;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
-    }
+ .detail-fullscreen-inner {
+  width: min(100%, 1100px);
+  margin: 0 auto;
+}
 
-    .detail-popup .detail-row {
-      padding: 12px 0;
-      font-size: 14px;
-    }
+.detail-fullscreen .detail-row {
+  padding: 18px 4px;
+  font-size: clamp(15px, 1.6vw, 19px);
+}
 
-    .detail-popup .detail-row strong {
-      text-align: right;
-      overflow-wrap: anywhere;
-    }
-
-    .detail-popup .detail-page-title {
-      font-size: 22px;
-      margin: 0;
-    }
+.detail-fullscreen .detail-page-title {
+  font-size: clamp(28px, 4vw, 44px);
+  margin: 0;
+}
 
   `;
 
