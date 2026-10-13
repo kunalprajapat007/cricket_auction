@@ -851,22 +851,23 @@ function updateCounts() {
 
 // ---------------- FULL-SCREEN DETAILS PAGE ----------------
 
+
 function showDetails(title, rows) {
   document.getElementById("detailModal")?.remove();
 
-  const page = document.createElement("section");
-  page.id = "detailModal";
-  page.className = "detail-fullscreen";
-  page.setAttribute("role", "region");
-  page.setAttribute("aria-label", `${title} details`);
+  const backdrop = document.createElement("div");
+  backdrop.id = "detailModal";
+  backdrop.className = "modal-backdrop";
+  backdrop.setAttribute("role", "presentation");
 
-  page.innerHTML = `
-    <div class="detail-fullscreen-inner">
+  backdrop.innerHTML = `
+    <div class="detail-popup" role="dialog"
+         aria-modal="true" aria-label="${safe(title)} details">
       <div class="modal-header"
-        style="margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border)">
-        <h1 class="detail-page-title">${safe(title)}</h1>
-        <button type="button" class="icon-btn" id="detailClose"
-          aria-label="Back to list">← Back</button>
+           style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border)">
+        <h2 class="detail-page-title">${safe(title)}</h2>
+        <button type="button" class="icon-btn"
+                id="detailClose" aria-label="Close details">×</button>
       </div>
 
       <div class="detail-page-grid">
@@ -880,12 +881,10 @@ function showDetails(title, rows) {
     </div>
   `;
 
-  document.body.appendChild(page);
-  document.body.style.overflow = "hidden";
+  document.body.appendChild(backdrop);
 
   const close = () => {
-    page.remove();
-    document.body.style.overflow = "";
+    backdrop.remove();
     document.removeEventListener("keydown", onKeyDown);
   };
 
@@ -893,7 +892,12 @@ function showDetails(title, rows) {
     if (event.key === "Escape") close();
   };
 
-  $("detailClose").addEventListener("click", close);
+  document.getElementById("detailClose").addEventListener("click", close);
+
+  backdrop.addEventListener("click", event => {
+    if (event.target === backdrop) close();
+  });
+
   document.addEventListener("keydown", onKeyDown);
 }
 
