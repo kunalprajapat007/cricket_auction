@@ -1,4 +1,3 @@
-
 import { firebaseConfig } from "./firebase-config.js";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -24,6 +23,8 @@ import {
   onSnapshot,
   doc,
   setDoc,
+  getDoc,
+  updateDoc,
   runTransaction,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -32,6 +33,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = id => document.getElementById(id);
+
+const TEAM_BUDGET = 1000000000; // ₹100 crore
+const BID_INCREMENT = 30000;    // ₹30,000 per click
 
 let currentUser = null;
 let currentRole = "viewer";
@@ -43,6 +47,7 @@ let stopTeams = null;
 let stopAuctions = null;
 let registerMode = false;
 let settingsTab = "profile";
+let migratedTeams = new Set();
 
 const isViewer = () => currentRole === "viewer";
 
@@ -68,19 +73,18 @@ function errorText(error) {
   const errors = {
     "auth/invalid-email": "Please enter a valid email address.",
     "auth/invalid-credential": "Incorrect email or password.",
-    "auth/user-not-found": "Account not found. Please create an account.",
+    "auth/user-not-found": "Account not found.",
     "auth/wrong-password": "Your current password is incorrect.",
     "auth/email-already-in-use": "This email is already registered.",
     "auth/weak-password": "Password must contain at least 6 characters.",
     "auth/too-many-requests": "Too many attempts. Please try again later.",
-    "auth/network-request-failed": "Network error. Please check your connection.",
+    "auth/network-request-failed": "Network error. Check your connection.",
     "auth/requires-recent-login": "Please sign in again to complete this action.",
-    "auth/invalid-action-code": "This verification link is invalid or expired.",
-    "permission-denied": "Access denied. Please check your Firebase Firestore Rules.",
-    "firestore/permission-denied": "Access denied. Please check your Firebase Firestore Rules."
+    "permission-denied": "Access denied. Check your Firebase Firestore Rules.",
+    "firestore/permission-denied": "Access denied. Check your Firebase Firestore Rules."
   };
 
-  return errors[error?.code] || error?.message || "Something went wrong. Please try again.";
+  return errors[error?.code] || error?.message || "Something went wrong.";
 }
 
 function safe(value) {
@@ -122,7 +126,7 @@ function requireEditor() {
   }
 
   if (isViewer()) {
-    showMessage("Viewer access is read-only. You cannot perform this action.", "error");
+    showMessage("Viewer access is read-only.", "error");
     return false;
   }
 
@@ -148,32 +152,21 @@ function addThemeStyles() {
     body.theme-light .modal,
     body.theme-light .card,
     body.theme-light .content-card,
-    body.theme-light .auction-card {
+    body.theme-light .auction-card,
+    body.theme-light .data-card {
       background: #ffffff !important;
       color: #182033 !important;
       border-color: #dce2ed !important;
     }
 
     body.theme-light input,
-    body.theme-light select,
-    body.theme-light textarea {
+    body.theme-light select {
       background: #ffffff !important;
       color: #182033 !important;
       border-color: #ccd4e2 !important;
     }
 
-    body.theme-light .muted-note,
-    body.theme-light .eyebrow {
-      color: #58647a;
-    }
-
-    body.theme-light .modal-backdrop {
-      background: rgba(15, 23, 42, .48);
-    }
-
-    [hidden] {
-      display: none !important;
-    }
+    [hidden] { display: none !important; }
 
     .settings-tabs {
       display: flex;
@@ -188,29 +181,20 @@ function addThemeStyles() {
       border-radius: 8px;
     }
 
-    .settings-content label,
-    #actionForm label {
+    .settings-content label {
       display: block;
       margin: 12px 0 6px;
     }
 
     .settings-content input,
-    .settings-content select,
-    #actionForm input,
-    #actionForm select {
+    .settings-content select {
       width: 100%;
       box-sizing: border-box;
       padding: 11px;
       margin-bottom: 8px;
     }
 
-    .settings-content button {
-      margin-top: 10px;
-    }
-
-    .settings-content .setting-panel {
-      padding: 8px 0;
-    }
+    .settings-content button { margin-top: 10px; }
 
     .full-btn {
       width: 100%;
@@ -244,15 +228,78 @@ function addThemeStyles() {
       gap: 12px;
     }
 
-    .icon-btn {
-      cursor: pointer;
-    }
+    .icon-btn { cursor: pointer; }
 
     .viewer-note {
       padding: 10px 14px;
       border-radius: 8px;
       margin: 12px 0;
     }
+
+    .clickable-card {
+      cursor: pointer;
+      transition: transform .18s, border-color .18s;
+    }
+
+    .clickable-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+    }
+
+    /* Player/team details: full-screen page, not popup */
+    .detail-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      overflow-y: auto;
+      padding: clamp(18px, 4vw, 48px);
+      background: var(--bg, #0b1020);
+      color: var(--text, #ffffff);
+    }
+
+    .detail-fullscreen-inner {
+      width: min(100%, 1100px);
+      margin: 0 auto;
+    }
+
+    .detail-fullscreen .detail-row {
+      padding: 18px 4px;
+      font-size: clamp(15px, 1.6vw, 19px);
+    }
+
+    .detail-fullscreen .detail-row strong {
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .detail-fullscreen .detail-page-title {
+      font-size: clamp(28px, 4vw, 44px);
+      margin: 0;
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row span:first-child { color: var(--muted); }
+
+    .bid-action-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px;
+      font-size: 16px;
+    }
+
+    .bid-form { margin-top: 16px; }
+    .bid-form label { margin-top: 12px; }
+    .bid-form select { margin-bottom: 5px; }
   `;
 
   document.head.appendChild(style);
@@ -314,7 +361,7 @@ window.toggleAuthMode = function () {
   }
 
   if ($("loginBtn")) {
-    $("loginBtn").textContent = registerMode ? "Register Now" : "Login / Register";
+    $("loginBtn").textContent = registerMode ? "Register Now" : "Login";
   }
 
   if ($("pass")) {
@@ -340,7 +387,7 @@ $("loginForm")?.addEventListener("submit", async event => {
 
   const email = $("email")?.value.trim();
   const password = $("pass")?.value;
-  const role = $("role")?.value || "viewer";
+  const selectedRole = $("role")?.value || "viewer";
   const button = $("loginBtn");
 
   if (!email || !password) {
@@ -359,16 +406,19 @@ $("loginForm")?.addEventListener("submit", async event => {
 
       await setDoc(doc(db, "users", result.user.uid), {
         email,
-        role,
+        role: selectedRole,
         name: "",
         createdAt: serverTimestamp()
       });
 
-      localStorage.setItem("auctionRole", role);
+      currentRole = selectedRole;
+      localStorage.setItem("auctionRole", selectedRole);
       showMessage("Account created successfully.");
     } else {
       await signInWithEmailAndPassword(auth, email, password);
-      localStorage.setItem("auctionRole", role);
+
+      currentRole = selectedRole;
+      localStorage.setItem("auctionRole", selectedRole);
       showMessage("Sign in successful.");
     }
   } catch (error) {
@@ -376,11 +426,10 @@ $("loginForm")?.addEventListener("submit", async event => {
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = registerMode ? "Register Now" : "Login / Register";
+      button.textContent = registerMode ? "Register Now" : "Login";
     }
   }
 });
-
 // ---------------- AUTH STATE ----------------
 
 onAuthStateChanged(auth, async user => {
@@ -405,9 +454,10 @@ onAuthStateChanged(auth, async user => {
   if ($("userTools")) $("userTools").hidden = false;
 
   if ($("profileEmail")) $("profileEmail").textContent = user.email || "";
-  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
   if ($("currentEmail")) $("currentEmail").textContent = user.email || "";
+  if ($("profileRole")) $("profileRole").textContent = roleLabel(currentRole);
   if ($("settingsRole")) $("settingsRole").textContent = roleLabel(currentRole);
+
   if ($("welcomeTitle")) {
     $("welcomeTitle").textContent =
       `Welcome${user.displayName ? ", " + user.displayName : ""}`;
@@ -425,10 +475,6 @@ async function loadUserProfile() {
   if (!currentUser) return;
 
   try {
-    const { getDoc } = await import(
-      "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
-    );
-
     const snapshot = await getDoc(doc(db, "users", currentUser.uid));
 
     if (snapshot.exists()) {
@@ -480,8 +526,8 @@ window.toggleProfile = function () {
 
 window.openSettings = function () {
   if ($("profileMenu")) $("profileMenu").hidden = true;
-
   renderSettings();
+
   if ($("settingsModal")) $("settingsModal").hidden = false;
 };
 
@@ -499,10 +545,11 @@ window.logout = async function () {
   }
 };
 
-// ---------------- SETTINGS INTERFACE ----------------
+// ---------------- SETTINGS ----------------
 
 function renderSettings() {
   const modal = $("settingsModal");
+
   if (!modal) {
     showMessage("Settings container was not found in the HTML.", "error");
     return;
@@ -563,7 +610,6 @@ function renderSettingsTab() {
           <input id="displayNameInput" maxlength="80"
             value="${safe(currentUser?.displayName || "")}"
             placeholder="Enter your full name" required>
-
           <button type="submit" class="primary-btn full-btn">Save Name</button>
         </form>
       </div>
@@ -571,7 +617,6 @@ function renderSettingsTab() {
 
     $("nameForm").addEventListener("submit", async event => {
       event.preventDefault();
-
       const name = $("displayNameInput").value.trim();
 
       if (!name) {
@@ -607,19 +652,12 @@ function renderSettingsTab() {
       <div class="setting-panel">
         <h3>Change Email Address</h3>
         <p>Current email: ${safe(currentUser?.email || "")}</p>
-
         <form id="changeEmailForm">
           <label for="settingsNewEmail">New Email Address</label>
-          <input id="settingsNewEmail" type="email"
-            placeholder="Enter new email address" required>
-
+          <input id="settingsNewEmail" type="email" required>
           <label for="emailPassword">Current Password</label>
-          <input id="emailPassword" type="password"
-            placeholder="Enter current password" required>
-
-          <button class="primary-btn full-btn" type="submit">
-            Send Verification Email
-          </button>
+          <input id="emailPassword" type="password" required>
+          <button class="primary-btn full-btn" type="submit">Send Verification Email</button>
         </form>
       </div>
     `;
@@ -636,15 +674,11 @@ function renderSettingsTab() {
       }
 
       try {
-        const credential = EmailAuthProvider.credential(
-          currentUser.email,
-          password
-        );
-
+        const credential = EmailAuthProvider.credential(currentUser.email, password);
         await reauthenticateWithCredential(currentUser, credential);
         await verifyBeforeUpdateEmail(currentUser, newEmail);
 
-        showMessage("Verification email sent. Open the link in your new inbox.");
+        showMessage("Verification email sent. Check your new inbox.");
         $("changeEmailForm").reset();
       } catch (error) {
         showMessage(errorText(error), "error");
@@ -658,23 +692,14 @@ function renderSettingsTab() {
     content.innerHTML = `
       <div class="setting-panel">
         <h3>Change Password</h3>
-
         <form id="changePasswordForm">
           <label for="oldPassword">Current Password</label>
-          <input id="oldPassword" type="password"
-            placeholder="Enter current password" required>
-
+          <input id="oldPassword" type="password" required>
           <label for="newPassword">New Password</label>
-          <input id="newPassword" type="password"
-            minlength="6" placeholder="At least 6 characters" required>
-
+          <input id="newPassword" type="password" minlength="6" required>
           <label for="confirmPassword">Confirm New Password</label>
-          <input id="confirmPassword" type="password"
-            minlength="6" placeholder="Re-enter new password" required>
-
-          <button class="primary-btn full-btn" type="submit">
-            Update Password
-          </button>
+          <input id="confirmPassword" type="password" minlength="6" required>
+          <button class="primary-btn full-btn" type="submit">Update Password</button>
         </form>
       </div>
     `;
@@ -697,11 +722,7 @@ function renderSettingsTab() {
       }
 
       try {
-        const credential = EmailAuthProvider.credential(
-          currentUser.email,
-          oldPassword
-        );
-
+        const credential = EmailAuthProvider.credential(currentUser.email, oldPassword);
         await reauthenticateWithCredential(currentUser, credential);
         await updatePassword(currentUser, newPassword);
 
@@ -720,15 +741,11 @@ function renderSettingsTab() {
       <div class="setting-panel">
         <h3>Appearance</h3>
         <label for="themeChoice">Choose Theme</label>
-
         <select id="themeChoice">
           <option value="dark">Dark Theme</option>
           <option value="light">Light Theme</option>
         </select>
-
-        <button class="primary-btn full-btn" id="saveTheme" type="button">
-          Apply Theme
-        </button>
+        <button class="primary-btn full-btn" id="saveTheme" type="button">Apply Theme</button>
       </div>
     `;
 
@@ -739,12 +756,10 @@ function renderSettingsTab() {
     });
   }
 }
-
 // ---------------- NAVIGATION ----------------
 
 window.show = function (sectionId) {
   const sections = ["dash", "players", "teams", "auction", "history"];
-
   if (!sections.includes(sectionId)) return;
 
   sections.forEach(id => {
@@ -757,7 +772,6 @@ window.show = function (sectionId) {
   });
 
   if ($("profileMenu")) $("profileMenu").hidden = true;
-
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
@@ -782,6 +796,7 @@ function listenToData() {
       teams = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
       renderTeams();
       updateCounts();
+      migrateExistingTeamBudgets();
     },
     error => showMessage(errorText(error), "error")
   );
@@ -798,16 +813,118 @@ function listenToData() {
   );
 }
 
+// Existing team budgets ko ₹100 crore par set karta hai.
+async function migrateExistingTeamBudgets() {
+  for (const team of teams) {
+    if (migratedTeams.has(team.id)) continue;
+    migratedTeams.add(team.id);
+
+    if (
+      Number(team.budget) === TEAM_BUDGET &&
+      Number(team.remainingBudget) <= TEAM_BUDGET
+    ) {
+      continue;
+    }
+
+    try {
+      await updateDoc(doc(db, "teams", team.id), {
+        budget: TEAM_BUDGET,
+        remainingBudget: TEAM_BUDGET,
+        budgetUpdatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.warn("Could not update team budget:", team.id, error);
+    }
+  }
+}
+
 function updateCounts() {
   if ($("pc")) $("pc").textContent = players.length;
   if ($("tc")) $("tc").textContent = teams.length;
 
-  // IMPORTANT: Count only live auctions, not all auction records.
   const count = liveAuctions().length;
 
   if ($("bc")) $("bc").textContent = count;
   if ($("liveAuctionCount")) $("liveAuctionCount").textContent = count;
   if ($("auctionCount")) $("auctionCount").textContent = count;
+}
+
+// ---------------- FULL-SCREEN DETAILS PAGE ----------------
+
+function showDetails(title, rows) {
+  document.getElementById("detailModal")?.remove();
+
+  const page = document.createElement("section");
+  page.id = "detailModal";
+  page.className = "detail-fullscreen";
+  page.setAttribute("role", "region");
+  page.setAttribute("aria-label", `${title} details`);
+
+  page.innerHTML = `
+    <div class="detail-fullscreen-inner">
+      <div class="modal-header"
+        style="margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border)">
+        <h1 class="detail-page-title">${safe(title)}</h1>
+        <button type="button" class="icon-btn" id="detailClose"
+          aria-label="Back to list">← Back</button>
+      </div>
+
+      <div class="detail-page-grid">
+        ${rows.map(([label, value]) => `
+          <div class="detail-row">
+            <span>${safe(label)}</span>
+            <strong>${safe(value)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(page);
+  document.body.style.overflow = "hidden";
+
+  const close = () => {
+    page.remove();
+    document.body.style.overflow = "";
+    document.removeEventListener("keydown", onKeyDown);
+  };
+
+  const onKeyDown = event => {
+    if (event.key === "Escape") close();
+  };
+
+  $("detailClose").addEventListener("click", close);
+  document.addEventListener("keydown", onKeyDown);
+}
+
+function playerDetails(player) {
+  const activeAuction = auctions.find(
+    item => item.playerId === player.id && item.status === "live"
+  );
+
+  showDetails(player.name || "Player Details", [
+    ["Player Name", player.name || "Unnamed Player"],
+    ["Playing Role", player.role || "Not specified"],
+    ["Base Price", money(player.basePrice ?? BID_INCREMENT)],
+    ["Status", player.status || "Available"],
+    ["Sold To", player.soldTo || "Not sold"],
+    ["Sold Price", player.soldPrice ? money(player.soldPrice) : "—"],
+    ["Live Auction", activeAuction ? "Yes" : "No"],
+    ["Current Bid", activeAuction ? money(activeAuction.currentBid) : "—"]
+  ]);
+}
+
+function teamDetails(team) {
+  showDetails(team.name || "Team Details", [
+    ["Team Name", team.name || "Unnamed Team"],
+    ["Owner", team.owner || "Not specified"],
+    ["Total Budget", money(team.budget ?? TEAM_BUDGET)],
+    ["Remaining Budget", money(team.remainingBudget ?? team.budget ?? TEAM_BUDGET)],
+    ["Spent Budget", money(
+      Number(team.budget ?? TEAM_BUDGET) -
+      Number(team.remainingBudget ?? team.budget ?? TEAM_BUDGET)
+    )]
+  ]);
 }
 
 // ---------------- PLAYER LIST ----------------
@@ -817,19 +934,39 @@ function renderPlayers() {
   if (!container) return;
 
   if (!players.length) {
-    container.innerHTML = `<div class="box empty-state">No players have been registered yet.</div>`;
+    container.innerHTML =
+      `<div class="box empty-state">No players have been registered yet.</div>`;
     return;
   }
 
   container.innerHTML = players.map(player => `
-    <article class="box content-card">
-      <span class="eyebrow">PLAYER</span>
+    <article class="box content-card data-card clickable-card"
+      data-player-details="${safe(player.id)}"
+      tabindex="0" role="button"
+      aria-label="View ${safe(player.name || "player")} details">
+      <span class="eyebrow">PLAYER · CLICK FOR DETAILS</span>
       <h3>${safe(player.name || "Unnamed Player")}</h3>
       <p>${safe(player.role || "Player")}</p>
-      <p><strong>Base Price:</strong> ${money(player.basePrice)}</p>
+      <p><strong>Base Price:</strong> ${money(player.basePrice ?? BID_INCREMENT)}</p>
       <p><strong>Status:</strong> ${safe(player.status || "Available")}</p>
     </article>
   `).join("");
+
+  container.querySelectorAll("[data-player-details]").forEach(card => {
+    const open = () => {
+      const player = players.find(item => item.id === card.dataset.playerDetails);
+      if (player) playerDetails(player);
+    };
+
+    card.addEventListener("click", open);
+
+    card.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
 }
 
 // ---------------- TEAM LIST ----------------
@@ -839,19 +976,39 @@ function renderTeams() {
   if (!container) return;
 
   if (!teams.length) {
-    container.innerHTML = `<div class="box empty-state">No teams have been created yet.</div>`;
+    container.innerHTML =
+      `<div class="box empty-state">No teams have been created yet.</div>`;
     return;
   }
 
   container.innerHTML = teams.map(team => `
-    <article class="box content-card">
-      <span class="eyebrow">TEAM</span>
+    <article class="box content-card data-card clickable-card"
+      data-team-details="${safe(team.id)}"
+      tabindex="0" role="button"
+      aria-label="View ${safe(team.name || "team")} details">
+      <span class="eyebrow">TEAM · CLICK FOR DETAILS</span>
       <h3>${safe(team.name || "Unnamed Team")}</h3>
       <p><strong>Owner:</strong> ${safe(team.owner || "Not specified")}</p>
-      <p><strong>Budget:</strong> ${money(team.budget)}</p>
-      <p><strong>Remaining:</strong> ${money(team.remainingBudget ?? team.budget)}</p>
+      <p><strong>Budget:</strong> ${money(team.budget ?? TEAM_BUDGET)}</p>
+      <p><strong>Remaining:</strong> ${money(team.remainingBudget ?? team.budget ?? TEAM_BUDGET)}</p>
     </article>
   `).join("");
+
+  container.querySelectorAll("[data-team-details]").forEach(card => {
+    const open = () => {
+      const team = teams.find(item => item.id === card.dataset.teamDetails);
+      if (team) teamDetails(team);
+    };
+
+    card.addEventListener("click", open);
+
+    card.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
 }
 
 // ---------------- LIVE AUCTIONS + BIDDING ----------------
@@ -863,49 +1020,52 @@ function renderAuctions() {
   const active = liveAuctions();
 
   if (!active.length) {
-    container.innerHTML = `<div class="box empty-state">There are currently no live auctions.</div>`;
+    container.innerHTML =
+      `<div class="box empty-state">There are currently no live auctions.</div>`;
     return;
   }
 
-  container.innerHTML = active.map(auction => `
-    <article class="box auction-card">
-      <span class="eyebrow">LIVE AUCTION</span>
-      <h3>${safe(auction.playerName || "Player")}</h3>
+  container.innerHTML = active.map(auction => {
+    const currentBid = Number(auction.currentBid || 0);
+    const nextBid = currentBid + BID_INCREMENT;
 
-      <p><strong>Current Bid:</strong> ${money(auction.currentBid)}</p>
-      <p><strong>Highest Bidder:</strong> ${safe(auction.teamName || "No bids yet")}</p>
+    return `
+      <article class="box auction-card">
+        <span class="eyebrow">LIVE AUCTION</span>
+        <h3>${safe(auction.playerName || "Player")}</h3>
 
-      ${!isViewer() ? `
-        <form class="bid-form" data-auction-id="${safe(auction.id)}">
-          <label>Select Team</label>
-          <select name="teamId" required>
-            <option value="">Choose a team</option>
-            ${teams.map(team => `
-              <option value="${safe(team.id)}">
-                ${safe(team.name)} — Remaining ${money(team.remainingBudget ?? team.budget)}
-              </option>
-            `).join("")}
-          </select>
+        <p><strong>Current Bid:</strong> ${money(currentBid)}</p>
+        <p><strong>Highest Bidder:</strong> ${safe(auction.teamName || "No bids yet")}</p>
+        <p><strong>Next Bid:</strong> ${money(nextBid)}</p>
 
-          <label>Bid Amount (₹)</label>
-          <input
-            name="bidAmount"
-            type="number"
-            min="${Number(auction.currentBid || 0) + 1}"
-            step="1"
-            placeholder="Enter a higher bid"
-            required
-          >
+        ${!isViewer() ? `
+          <form class="bid-form" data-auction-id="${safe(auction.id)}">
+            <label>Select Team</label>
+            <select name="teamId" required>
+              <option value="">Choose a team</option>
+              ${teams.map(team => `
+                <option value="${safe(team.id)}">
+                  ${safe(team.name)} — Remaining
+                  ${money(team.remainingBudget ?? team.budget ?? TEAM_BUDGET)}
+                </option>
+              `).join("")}
+            </select>
 
-          <button type="submit" class="primary-btn">Place Bid</button>
-          <button type="button" class="secondary-btn"
-            data-close-auction="${safe(auction.id)}">Close Auction</button>
-        </form>
-      ` : `
-        <p class="viewer-note">View-only mode. Bidding is disabled.</p>
-      `}
-    </article>
-  `).join("");
+            <button type="submit" class="primary-btn bid-action-btn">
+              Bid ${money(BID_INCREMENT)} · Total ${money(nextBid)}
+            </button>
+
+            <button type="button" class="secondary-btn full-btn"
+              data-close-auction="${safe(auction.id)}">
+              Close Auction
+            </button>
+          </form>
+        ` : `
+          <p class="viewer-note">View-only mode. Bidding is disabled.</p>
+        `}
+      </article>
+    `;
+  }).join("");
 
   container.querySelectorAll(".bid-form").forEach(form => {
     form.addEventListener("submit", async event => {
@@ -915,23 +1075,27 @@ function renderAuctions() {
 
       const data = new FormData(form);
       const teamId = String(data.get("teamId") || "");
-      const amount = Number(data.get("bidAmount"));
+      const auction = auctions.find(item => item.id === form.dataset.auctionId);
 
-      if (!teamId || !Number.isFinite(amount)) {
-        showMessage("Select a team and enter a valid bid.", "error");
+      if (!teamId || !auction) {
+        showMessage("Select a team.", "error");
         return;
       }
 
+      // First bid ₹30,000; every next bid increases by ₹30,000.
+      const amount = Number(auction.currentBid || 0) + BID_INCREMENT;
       const button = form.querySelector('button[type="submit"]');
+
       button.disabled = true;
-      button.textContent = "Submitting...";
+      button.textContent = "Submitting bid...";
 
       try {
         await placeBid(form.dataset.auctionId, teamId, amount);
       } finally {
         if (button.isConnected) {
           button.disabled = false;
-          button.textContent = "Place Bid";
+          button.textContent =
+            `Bid ${money(BID_INCREMENT)} · Total ${money(amount)}`;
         }
       }
     });
@@ -941,17 +1105,12 @@ function renderAuctions() {
     button.addEventListener("click", async () => {
       if (!requireEditor()) return;
 
-      const confirmed = window.confirm(
-        "Are you sure you want to close this auction?"
-      );
-
-      if (confirmed) {
+      if (window.confirm("Are you sure you want to close this auction?")) {
         await closeAuction(button.dataset.closeAuction);
       }
     });
   });
 }
-
 async function placeBid(auctionId, teamId, amount) {
   if (!requireEditor()) return;
 
@@ -960,7 +1119,6 @@ async function placeBid(auctionId, teamId, amount) {
       const auctionRef = doc(db, "auctions", auctionId);
       const teamRef = doc(db, "teams", teamId);
 
-      // All reads happen before any writes.
       const auctionSnap = await transaction.get(auctionRef);
       const teamSnap = await transaction.get(teamRef);
 
@@ -975,16 +1133,18 @@ async function placeBid(auctionId, teamId, amount) {
         throw new Error("This auction is no longer live.");
       }
 
-      if (amount <= Number(auction.currentBid || 0)) {
-        throw new Error("Your bid must be higher than the current bid.");
+      const currentBid = Number(auction.currentBid || 0);
+
+      if (amount !== currentBid + BID_INCREMENT) {
+        throw new Error("The bid has changed. Please try again.");
       }
 
       const remaining = Number(
-        team.remainingBudget ?? team.budget ?? 0
+        team.remainingBudget ?? team.budget ?? TEAM_BUDGET
       );
 
       if (amount > remaining) {
-        throw new Error("The selected team does not have enough remaining budget.");
+        throw new Error("This team does not have enough remaining budget.");
       }
 
       transaction.update(auctionRef, {
@@ -995,7 +1155,7 @@ async function placeBid(auctionId, teamId, amount) {
       });
     });
 
-    showMessage("Bid placed successfully.");
+    showMessage(`Bid placed successfully: ${money(amount)}.`);
   } catch (error) {
     showMessage(errorText(error), "error");
   }
@@ -1025,10 +1185,15 @@ window.startAuction = function () {
       <select id="auctionPlayer" required>
         ${available.map(player => `
           <option value="${safe(player.id)}">
-            ${safe(player.name)} — ${money(player.basePrice)}
+            ${safe(player.name)} — Starting price ${money(BID_INCREMENT)}
           </option>
         `).join("")}
       </select>
+
+      <p class="muted-note">
+        Starting bid: ${money(BID_INCREMENT)}.
+        Each click increases the bid by ${money(BID_INCREMENT)}.
+      </p>
     `,
     async () => {
       const player = available.find(
@@ -1040,7 +1205,7 @@ window.startAuction = function () {
       await addDoc(collection(db, "auctions"), {
         playerId: player.id,
         playerName: player.name || "Player",
-        currentBid: Number(player.basePrice || 0),
+        currentBid: 0,
         teamId: "",
         teamName: "",
         status: "live",
@@ -1096,14 +1261,17 @@ async function closeAuction(auctionId) {
       if (auction.teamId && teamSnap?.exists()) {
         const team = teamSnap.data();
         const remaining = Number(
-          team.remainingBudget ?? team.budget ?? 0
+          team.remainingBudget ?? team.budget ?? TEAM_BUDGET
         ) - Number(auction.currentBid || 0);
 
         if (remaining < 0) {
           throw new Error("The winning team does not have enough budget.");
         }
 
-        transaction.update(teamRef, { remainingBudget: remaining });
+        transaction.update(teamRef, {
+          budget: TEAM_BUDGET,
+          remainingBudget: remaining
+        });
       }
 
       transaction.update(auctionRef, {
@@ -1112,13 +1280,15 @@ async function closeAuction(auctionId) {
       });
 
       if (playerRef && playerSnap?.exists()) {
-        transaction.update(playerRef, auction.teamId
-          ? {
-              status: "Sold",
-              soldTo: auction.teamName || "",
-              soldPrice: Number(auction.currentBid || 0)
-            }
-          : { status: "Unsold" }
+        transaction.update(
+          playerRef,
+          auction.teamId
+            ? {
+                status: "Sold",
+                soldTo: auction.teamName || "",
+                soldPrice: Number(auction.currentBid || 0)
+              }
+            : { status: "Unsold" }
         );
       }
     });
@@ -1129,7 +1299,9 @@ async function closeAuction(auctionId) {
   }
 }
 
-// ---------------- ADD PLAYER / TEAM MODALS ----------------
+// ---------------- DYNAMIC FORM MODAL ----------------
+// Ye modal sirf forms ke liye hai.
+// Player/Team ki details full-screen page par khulti hain.
 
 function openFormModal(title, fieldsHtml, onSubmit) {
   document.getElementById("dynamicActionModal")?.remove();
@@ -1167,7 +1339,10 @@ function openFormModal(title, fieldsHtml, onSubmit) {
 
     if (!requireEditor()) return;
 
-    const button = event.currentTarget.querySelector('button[type="submit"]');
+    const button = event.currentTarget.querySelector(
+      'button[type="submit"]'
+    );
+
     button.disabled = true;
     button.textContent = "Saving...";
 
@@ -1184,6 +1359,8 @@ function openFormModal(title, fieldsHtml, onSubmit) {
     }
   });
 }
+
+// ---------------- ADD PLAYER ----------------
 
 window.addPlayer = function () {
   if (!requireEditor()) return;
@@ -1202,22 +1379,23 @@ window.addPlayer = function () {
         <option value="Wicketkeeper">Wicketkeeper</option>
       </select>
 
-      <label for="newPlayerPrice">Base Price (₹)</label>
-      <input id="newPlayerPrice" type="number" min="0" step="1" required>
+      <label>Base Price</label>
+      <input value="${money(BID_INCREMENT)}" readonly>
+
+      <p class="muted-note">
+        The starting auction price is fixed at ${money(BID_INCREMENT)}.
+      </p>
     `,
     async () => {
       const name = $("newPlayerName").value.trim();
       const role = $("newPlayerRole").value;
-      const basePrice = Number($("newPlayerPrice").value);
 
-      if (!name || !Number.isFinite(basePrice) || basePrice < 0) {
-        throw new Error("Enter a valid player name and base price.");
-      }
+      if (!name) throw new Error("Enter a valid player name.");
 
       await addDoc(collection(db, "players"), {
         name,
         role,
-        basePrice,
+        basePrice: BID_INCREMENT,
         status: "Available",
         createdBy: currentUser.uid,
         createdAt: serverTimestamp()
@@ -1227,6 +1405,8 @@ window.addPlayer = function () {
     }
   );
 };
+
+// ---------------- ADD TEAM ----------------
 
 window.addTeam = function () {
   if (!requireEditor()) return;
@@ -1240,34 +1420,33 @@ window.addTeam = function () {
       <label for="newTeamOwner">Owner Name</label>
       <input id="newTeamOwner" maxlength="100">
 
-      <label for="newTeamBudget">Team Budget (₹)</label>
-      <input id="newTeamBudget" type="number" min="1" step="1" required>
+      <label>Team Budget</label>
+      <input value="${money(TEAM_BUDGET)}" readonly>
     `,
     async () => {
       const name = $("newTeamName").value.trim();
       const owner = $("newTeamOwner").value.trim() ||
-        currentUser.displayName || currentUser.email || "Team Owner";
-      const budget = Number($("newTeamBudget").value);
+        currentUser.displayName ||
+        currentUser.email ||
+        "Team Owner";
 
-      if (!name || !Number.isFinite(budget) || budget <= 0) {
-        throw new Error("Enter a valid team name and budget.");
-      }
+      if (!name) throw new Error("Enter a valid team name.");
 
       await addDoc(collection(db, "teams"), {
         name,
         owner,
-        budget,
-        remainingBudget: budget,
+        budget: TEAM_BUDGET,
+        remainingBudget: TEAM_BUDGET,
         createdBy: currentUser.uid,
         createdAt: serverTimestamp()
       });
 
-      showMessage("Team created successfully.");
+      showMessage("Team created with a ₹100 crore budget.");
     }
   );
 };
 
-// ---------------- HISTORY ----------------
+// ---------------- AUCTION HISTORY ----------------
 
 function renderHistory() {
   const container = $("hist");
@@ -1276,15 +1455,18 @@ function renderHistory() {
   const finished = auctions.filter(item => item.status !== "live");
 
   if (!finished.length) {
-    container.innerHTML = `<div class="box empty-state">No completed auctions yet.</div>`;
+    container.innerHTML =
+      `<div class="box empty-state">No completed auctions yet.</div>`;
     return;
   }
 
   container.innerHTML = finished
     .slice()
-    .sort((a, b) => (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0))
+    .sort((a, b) =>
+      (b.closedAt?.seconds || 0) - (a.closedAt?.seconds || 0)
+    )
     .map(auction => `
-      <article class="box content-card">
+      <article class="box content-card data-card">
         <span class="eyebrow">AUCTION HISTORY</span>
         <h3>${safe(auction.playerName || "Player")}</h3>
         <p><strong>Winner:</strong> ${safe(auction.teamName || "No winning team")}</p>
