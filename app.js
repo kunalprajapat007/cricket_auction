@@ -119,7 +119,8 @@ function stopDataListeners() {
   stopAuctions = null;
 }
 
-function requireEditor() {
+
+function requireEditor(action = "general") {
   if (!currentUser) {
     showMessage("Please sign in first.", "error");
     return false;
@@ -129,11 +130,14 @@ function requireEditor() {
     showMessage("Viewer access is read only.", "error");
     return false;
   }
- if (isBiddingAction && currentRole === "player") {
-    showMessage("Access Denied: Bidding privileges are restricted to Team Owners.", "error");
+
+  if (currentRole === "player" && action !== "registerPlayer") {
+    showMessage(
+      "Access Denied: Players can only register players. Only Team Owners can perform this action.",
+      "error"
+    );
     return false;
   }
-
 
   return true;
 }
@@ -1403,7 +1407,7 @@ function openFormModal(title, fieldsHtml, onSubmit) {
 // ---------------- ADD PLAYER ----------------
 
 window.addPlayer = function () {
-  if (!requireEditor()) return;
+  if (!requireEditor("registerPlayer")) return;
 
   openFormModal(
     "Register Player",
