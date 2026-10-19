@@ -336,3 +336,18 @@ footer span { padding: 0 5px; color: var(--accent); }
 .toggle-auth-note span:hover {
   filter: brightness(1.2);
 }
+
+/* Fixed notification messages */
+#message,
+.message,
+.toast,
+.notification {
+  position: fixed !important;
+  top: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  z-index: 99999 !important;
+  width: calc(100% - 32px);
+  max-width: 450px;
+  box-sizing: border-box;
+}
