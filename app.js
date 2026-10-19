@@ -133,7 +133,7 @@ function requireEditor(action = "general") {
 
   if (currentRole === "player" && action !== "registerPlayer") {
     showMessage(
-      "Access Denied: Players can only register players. Only Team Owners can perform this action.",
+      " Only Team Owners can access this feature.",
       "error"
     );
     return false;
