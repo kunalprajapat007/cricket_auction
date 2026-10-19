@@ -125,8 +125,8 @@ function requireEditor() {
     return false;
   }
 
-  if (isViewer()) {
-    showMessage("Viewer access is read-only.", "error");
+  if (isViewer() || currentRole === "player") {
+    showMessage("Only Team Owners can access.", "error");
     return false;
   }
 
