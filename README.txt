@@ -2,6 +2,13 @@
 
 Welcome to **Smart Cricket Auction**, a dynamic web application built to simulate live cricket player auctions. The platform allows users to manage their accounts, register players, build teams, and participate in real-time bidding rooms.
 
+
+
+For Faculty login -  Test Email  :  testuser@gmail.com
+                        Password :  password123
+
+
+
 🌐 **Live Demo:** [kunalprajapat007.github.io/cricket_auction/](https://kunalprajapat007.github.io/cricket_auction/)
 
 ---
