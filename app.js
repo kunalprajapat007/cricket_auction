@@ -129,11 +129,10 @@ function requireEditor() {
     showMessage("Viewer access is read only.", "error");
     return false;
   }
-  // Add this check at the start of your bidding logic function
-if (currentRole === "player") {
-  showMessage("Access Denied: Bidding privileges are restricted to Team Owners.", "error");
-  return; // Stops the execution so players cannot place a bid
-}
+ if (isBiddingAction && currentRole === "player") {
+    showMessage("Access Denied: Bidding privileges are restricted to Team Owners.", "error");
+    return false;
+  }
 
 
   return true;
